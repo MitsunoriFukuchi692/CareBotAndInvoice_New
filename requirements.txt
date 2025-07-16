@@ -1,0 +1,43 @@
+# OpenAI client — v0.27.x 系で httpx との互換性を確保
+openai>=0.27.0,<0.28.0
+
+# HTTP クライアント — Client.__init__(proxies) をサポートするバージョン
+httpx==0.23.3
+
+# Web サーバー起動用
+gunicorn
+
+# Flask 本体
+Flask==2.3.3
+
+# レート制限ミドルウェア
+flask-limiter==2.9.2 
+
+# Google Cloud Text-to-Speech
+google-cloud-texttospeech==2.15.1
+
+# Supabase Python クライアント
+supabase
+
+# 他に使っているパッケージがあれば、この下に追記してください。
+
+Flask-Cors==4.0.0
+
+python-dotenv==1.0.1
+flask
+flask-cors
+openai>=1.0.0
+gTTS
+python-dotenv
+google-cloud-texttospeech
+Flask
+gunicorn
+flask
+flask-cors
+openai>=1.0.0
+gTTS
+python-dotenv
+google-cloud-texttospeech
+Flask
+gunicorn
+stripe

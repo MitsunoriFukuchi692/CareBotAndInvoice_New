@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>みまくん音声テスト</title>
+</head>
+<body>
+  <h1>みまくん 音声テストフォーム</h1>
+  <form id="speakForm">
+    <textarea id="text" rows="4" cols="50" placeholder="しゃべらせたい文章を入力してください"></textarea><br>
+    <button type="submit">送信して再生</button>
+  </form>
+  <audio id="audio" controls></audio>
+
+  <script>
+    document.getElementById("speakForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const text = document.getElementById("text").value;
+
+      const response = await fetch("/speak", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: text }),
+      });
+
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        document.getElementById("audio").src = url;
+      } else {
+        alert("音声合成に失敗しました");
+      }
+    });
+  </script>
+</body>
+</html>
