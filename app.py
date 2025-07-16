@@ -1,3 +1,4 @@
+```python
 import os
 import json
 import glob
@@ -5,7 +6,7 @@ import logging
 import tempfile
 from io import BytesIO
 from datetime import datetime, timedelta
-from flask import Flask, render_template, request, jsonify, redirect, send_from_directory, send_file
+from flask import Flask, render_template, request, jsonify, redirect, send_file
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -29,10 +30,8 @@ with tempfile.NamedTemporaryFile(delete=False, suffix=".json") as tmp:
 
 # Flask アプリ初期化
 app = Flask(__name__, static_folder="static")
-# キャッシュ無効化設定
-app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0  # キャッシュ無効化
 CORS(app, origins=["https://robostudy.jp"], supports_credentials=True)
-# レート制限設定
 limiter = Limiter(app, key_func=get_remote_address, default_limits=["10 per minute"])
 
 # APIキー設定
@@ -48,14 +47,14 @@ def add_header(response):
     response.headers["Expires"] = "0"
     return response
 
-# ------------------ API Endpoints ------------------
-# トップページ（統合版）
+# ------------------ ルート ------------------
 @app.route("/")
 @app.route("/ja/")
 def index():
+    # templates/index.html をレンダリング
     return render_template("index.html")
 
-# テンプレート取得
+# ------------------ API Endpoints ------------------
 @app.route("/ja/templates", methods=["GET"])
 def get_templates():
     return jsonify([
@@ -66,7 +65,6 @@ def get_templates():
         {"category": "排便", "caregiver": ["お通じはいかがですか？", "問題ありませんか？"], "caree": ["問題ありません。", "少し便秘気味です。"]}
     ])
 
-# 通常チャット
 @app.route("/ja/chat", methods=["POST"])
 def chat_ja():
     data = request.get_json()
@@ -79,9 +77,9 @@ def chat_ja():
         )
         return jsonify({"response": response.choices[0].message.content})
     except Exception as e:
+        logging.exception("/ja/chat エラー")
         return jsonify({"error": str(e)}), 500
 
-# 用語説明
 @app.route("/ja/explain", methods=["POST"])
 def explain():
     data = request.get_json()
@@ -95,30 +93,30 @@ def explain():
             model="gpt-3.5-turbo",
             messages=msgs
         )
-        explanation = response.choices[0].message.content.strip()
-        return jsonify({"explanation": explanation})
+        return jsonify({"explanation": response.choices[0].message.content.strip()})
     except Exception as e:
+        logging.exception("/ja/explain エラー")
         return jsonify({"error": str(e)}), 500
 
-# 翻訳
 @app.route("/ja/translate", methods=["POST"])
 def translate():
     data = request.get_json()
     text = data.get("text", "")
     direction = data.get("direction", "ja-en")
-    prompt = (f"次の日本語を英語に翻訳してください:\n\n{text}" if direction == "ja-en"
-              else f"Translate the following English into Japanese:\n\n{text}")
+    prompt = (
+        f"次の日本語を英語に翻訳してください:\n\n{text}" if direction == "ja-en"
+        else f"Translate the following English into Japanese:\n\n{text}"
+    )
     try:
         resp = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[{"role": "user", "content": prompt}]
         )
-        translated = resp.choices[0].message.content.strip()
-        return jsonify({"translated": translated})
+        return jsonify({"translated": resp.choices[0].message.content.strip()})
     except Exception as e:
+        logging.exception("/ja/translate エラー")
         return jsonify({"error": str(e)}), 500
 
-# 会話ログ保存
 @app.route("/ja/save_log", methods=["POST"])
 def save_log():
     data = request.get_json()
@@ -127,13 +125,12 @@ def save_log():
     now_ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
     file_path = os.path.join(log_dir, f"log_{now_ts}.txt")
     with open(file_path, "w", encoding="utf-8") as f:
-        f.write("ユーザー名: " + data.get('username', '') + "\n")
-        f.write("日時: " + data.get('timestamp', '') + "\n")
-        f.write("入力: " + data.get('input', '') + "\n")
-        f.write("返答: " + data.get('response', '') + "\n")
+        f.write(f"ユーザー名: {data.get('username','')}\n")
+        f.write(f"日時: {data.get('timestamp','')}\n")
+        f.write(f"入力: {data.get('input','')}\n")
+        f.write(f"返答: {data.get('response','')}\n")
     return jsonify({"status": "success"})
 
-# 日報作成
 @app.route("/ja/daily_report", methods=["GET"])
 def daily_report():
     log_files = sorted(glob.glob("logs/log_*.txt"))
@@ -150,13 +147,10 @@ def daily_report():
         ]
     )
     jst_now = datetime.utcnow() + timedelta(hours=9)
-    now_str = jst_now.strftime("%Y-%m-%d %H:%M")
-    summary_body = response.choices[0].message.content.strip()
-    summary = "日報作成日時: " + now_str + "\n" + summary_body
-    buf = BytesIO(summary.encode("utf-8"))
+    summary = response.choices[0].message.content.strip()
+    buf = BytesIO((f"日報作成日時: {jst_now.strftime('%Y-%m-%d %H:%M')}\n" + summary).encode("utf-8"))
     return send_file(buf, as_attachment=True, download_name="daily_report.txt", mimetype="text/plain")
 
-# チャット＋TTS＋インボイス統合エンドポイント
 @app.route("/chat", methods=["POST"])
 @limiter.limit("3 per 10 seconds")
 def chat():
@@ -164,48 +158,30 @@ def chat():
         data = json.loads(request.data)
         user_text = data.get("text", "").strip()
         if len(user_text) > 100:
-            return jsonify({"reply": "みまくん: メッセージは100文字以内でお願いします。"}), 400
-
-        # ChatGPT へ送信
+            return jsonify({"reply": "メッセージは100文字以内でお願いします。"}), 400
         response = openai.ChatCompletion.create(
             model="gpt-4o",
-            messages=[
-                {"role": "system", "content": "あなたは親切な日本語のアシスタントです。"},
-                {"role": "user",   "content": user_text}
-            ]
+            messages=[{"role": "system", "content": "あなたは親切な日本語のアシスタントです。"}, {"role": "user", "content": user_text}]
         )
-        reply_text = response.choices[0].message["content"].strip()
+        reply_text = response.choices[0].message.content.strip()
         if len(reply_text) > 200:
             reply_text = reply_text[:197] + "..."
-
-        # TTS 合成
         tts_client = texttospeech.TextToSpeechClient()
-        synthesis_input = texttospeech.SynthesisInput(text=reply_text)
-        voice = texttospeech.VoiceSelectionParams(
-            language_code="ja-JP",
-            ssml_gender=texttospeech.SsmlVoiceGender.NEUTRAL
-        )
-        audio_config = texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.MP3)
         tts_response = tts_client.synthesize_speech(
-            input=synthesis_input, voice=voice, audio_config=audio_config
+            input=texttospeech.SynthesisInput(text=reply_text),
+            voice=texttospeech.VoiceSelectionParams(language_code="ja-JP", ssml_gender=texttospeech.SsmlVoiceGender.NEUTRAL),
+            audio_config=texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.MP3)
         )
-
-        # 音声ファイル保存
         os.makedirs("static", exist_ok=True)
         with open("static/output.mp3", "wb") as out:
             out.write(tts_response.audio_content)
-
-        # ログ保存
         with open("chatlog.txt", "a", encoding="utf-8") as f:
             f.write(f"ユーザー: {user_text}\nみまくん: {reply_text}\n---\n")
-
         return jsonify({"reply": reply_text})
-
     except Exception:
         logging.exception("/chat エラー")
-        return jsonify({"reply": "みまくん: 内部エラーです。再度お試しください。"}), 500
+        return jsonify({"reply": "内部エラーです。再度お試しください。"}), 500
 
-# 会話ログ表示・ダウンロード
 @app.route("/logs")
 def logs():
     try:
@@ -220,13 +196,9 @@ def download_logs():
     return (
         open("chatlog.txt", "rb").read(),
         200,
-        {
-            "Content-Type": "application/octet-stream",
-            "Content-Disposition": 'attachment; filename="chatlog.txt"',
-        },
+        {"Content-Type": "application/octet-stream", "Content-Disposition": 'attachment; filename="chatlog.txt"'}
     )
 
-# インボイス発行
 @app.route("/create_invoice", methods=["POST"])
 def create_invoice():
     customer = stripe.Customer.create(email="test@example.com", name="テスト顧客")
@@ -238,3 +210,4 @@ def create_invoice():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
+```
