@@ -5,7 +5,7 @@ import logging
 import tempfile
 from io import BytesIO
 from datetime import datetime, timedelta
-from flask import Flask, render_template, request, jsonify, redirect, send_file
+from flask import Flask, request, jsonify, redirect, send_from_directory, send_file
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -45,11 +45,18 @@ def add_header(response):
     response.headers["Expires"] = "0"
     return response
 
-# ------------------ ルート ------------------
-@app.route("/")
-@app.route("/ja/")
-def index():
-    return render_template("index.html")
+# ------------------ SPA ルーティング ------------------
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def serve_spa(path):
+    """
+    SPA と静的リソースを配信するルーティング
+    """
+    static_dir = os.path.join(app.root_path, 'static')
+    full_path = os.path.join(static_dir, path)
+    if path and os.path.isfile(full_path):
+        return send_from_directory(static_dir, path)
+    return send_from_directory(static_dir, 'index.html')
 
 # ------------------ API Endpoints ------------------
 @app.route("/ja/templates", methods=["GET"])
@@ -134,12 +141,12 @@ def daily_report():
     with open(latest, encoding="utf-8") as f:
         content = f.read()
     response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "以下の対話ログをもとに、本日の介護日報を日本語で短くまとめてください。"},
-                {"role": "user", "content": content}
-            ]
-        )
+        model="gpt-3.5-turbo",
+        messages=[
+            {"role": "system", "content": "以下の対話ログをもとに、本日の介護日報を日本語で短くまとめてください。"},
+            {"role": "user", "content": content}
+        ]
+    )
     jst_now = datetime.utcnow() + timedelta(hours=9)
     summary = response.choices[0].message.content.strip()
     buf = BytesIO((f"日報作成日時: {jst_now.strftime('%Y-%m-%d %H:%M')}\n" + summary).encode("utf-8"))
@@ -177,7 +184,7 @@ def chat():
         return jsonify({"reply": reply_text})
     except Exception:
         logging.exception("/chat エラー")
-        return jsonify({{"reply": "内部エラーです。再度お試しください。"}}), 500
+        return jsonify({"reply": "内部エラーです。再度お試しください。"}), 500
 
 @app.route("/logs")
 def logs():
@@ -207,3 +214,4 @@ def create_invoice():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
+```
