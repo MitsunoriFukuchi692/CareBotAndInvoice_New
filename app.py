@@ -134,12 +134,12 @@ def daily_report():
     with open(latest, encoding="utf-8") as f:
         content = f.read()
     response = client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=[
-            {"role": "system", "content": "以下の対話ログをもとに、本日の介護日報を日本語で短くまとめてください。"},
-            {"role": "user", "content": content}
-        ]
-    )
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "以下の対話ログをもとに、本日の介護日報を日本語で短くまとめてください。"},
+                {"role": "user", "content": content}
+            ]
+        )
     jst_now = datetime.utcnow() + timedelta(hours=9)
     summary = response.choices[0].message.content.strip()
     buf = BytesIO((f"日報作成日時: {jst_now.strftime('%Y-%m-%d %H:%M')}\n" + summary).encode("utf-8"))
@@ -177,7 +177,7 @@ def chat():
         return jsonify({"reply": reply_text})
     except Exception:
         logging.exception("/chat エラー")
-        return jsonify({"reply": "内部エラーです。再度お試しください。"}), 500
+        return jsonify({{"reply": "内部エラーです。再度お試しください。"}}), 500
 
 @app.route("/logs")
 def logs():
@@ -207,4 +207,3 @@ def create_invoice():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
-```}]}
