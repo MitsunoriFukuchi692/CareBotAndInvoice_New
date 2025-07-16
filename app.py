@@ -5,7 +5,7 @@ import logging
 import tempfile
 from io import BytesIO
 from datetime import datetime, timedelta
-from flask import Flask, request, jsonify, redirect, send_from_directory, send_file
+from flask import Flask, render_template, request, jsonify, redirect, send_from_directory
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -28,7 +28,11 @@ with tempfile.NamedTemporaryFile(delete=False, suffix=".json") as tmp:
     os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = tmp.name
 
 # Flask アプリ初期化
-app = Flask(__name__, static_folder="static")
+app = Flask(
+    __name__,
+    static_folder="static",      # static フォルダを静的配信
+    template_folder="templates"  # templates フォルダをテンプレート
+)
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0  # キャッシュ無効化
 CORS(app, origins=["https://robostudy.jp"], supports_credentials=True)
 limiter = Limiter(app, key_func=get_remote_address, default_limits=["10 per minute"])
@@ -40,23 +44,23 @@ stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 
 @app.after_request
 def add_header(response):
+    # キャッシュ無効化ヘッダー
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
     return response
 
-# ------------------ SPA ルーティング ------------------
-@app.route('/', defaults={'path': ''})
-@app.route('/<path:path>')
-def serve_spa(path):
-    """
-    SPA と静的リソースを配信するルーティング
-    """
-    static_dir = os.path.join(app.root_path, 'static')
-    full_path = os.path.join(static_dir, path)
-    if path and os.path.isfile(full_path):
-        return send_from_directory(static_dir, path)
-    return send_from_directory(static_dir, 'index.html')
+# ------------------ ルート ------------------
+@app.route("/")
+@app.route("/ja/")
+def index():
+    # templates/index.html をレンダリング
+    return render_template("index.html")
+
+# 静的ファイル用ルート（省略可: Flask が自動配信）
+@app.route('/static/<path:filename>')
+def static_files(filename):
+    return send_from_directory(app.static_folder, filename)
 
 # ------------------ API Endpoints ------------------
 @app.route("/ja/templates", methods=["GET"])
