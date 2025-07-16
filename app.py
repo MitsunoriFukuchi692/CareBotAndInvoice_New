@@ -1,4 +1,3 @@
-```python
 import os
 import json
 import glob
@@ -41,7 +40,6 @@ stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 
 @app.after_request
 def add_header(response):
-    # キャッシュ無効化ヘッダー
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
@@ -51,7 +49,6 @@ def add_header(response):
 @app.route("/")
 @app.route("/ja/")
 def index():
-    # templates/index.html をレンダリング
     return render_template("index.html")
 
 # ------------------ API Endpoints ------------------
@@ -87,7 +84,7 @@ def explain():
     try:
         msgs = [
             {"role": "system", "content": "日本語で30文字以内で簡潔に専門用語を説明してください。"},
-            {"role": "user",   "content": term + "とは？"}
+            {"role": "user", "content": term + "とは？"}
         ]
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
@@ -103,10 +100,7 @@ def translate():
     data = request.get_json()
     text = data.get("text", "")
     direction = data.get("direction", "ja-en")
-    prompt = (
-        f"次の日本語を英語に翻訳してください:\n\n{text}" if direction == "ja-en"
-        else f"Translate the following English into Japanese:\n\n{text}"
-    )
+    prompt = (f"次の日本語を英語に翻訳してください:\n\n{text}" if direction == "ja-en" else f"Translate the following English into Japanese:\n\n{text}")
     try:
         resp = client.chat.completions.create(
             model="gpt-3.5-turbo",
@@ -143,7 +137,7 @@ def daily_report():
         model="gpt-3.5-turbo",
         messages=[
             {"role": "system", "content": "以下の対話ログをもとに、本日の介護日報を日本語で短くまとめてください。"},
-            {"role": "user",   "content": content}
+            {"role": "user", "content": content}
         ]
     )
     jst_now = datetime.utcnow() + timedelta(hours=9)
@@ -161,7 +155,10 @@ def chat():
             return jsonify({"reply": "メッセージは100文字以内でお願いします。"}), 400
         response = openai.ChatCompletion.create(
             model="gpt-4o",
-            messages=[{"role": "system", "content": "あなたは親切な日本語のアシスタントです。"}, {"role": "user", "content": user_text}]
+            messages=[
+                {"role": "system", "content": "あなたは親切な日本語のアシスタントです。"},
+                {"role": "user", "content": user_text}
+            ]
         )
         reply_text = response.choices[0].message.content.strip()
         if len(reply_text) > 200:
@@ -210,4 +207,4 @@ def create_invoice():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
-```
+```}]}
