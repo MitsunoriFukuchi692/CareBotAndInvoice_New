@@ -2,25 +2,34 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <title>AIみまくんトップ</title>
-</head>
-</html>
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>介護支援チャットボット</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AIみまくん＋インボイスデモ</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
 </head>
 <body>
+  <!-- ナビゲーション -->
   <header>
-    <h1 id="chat-header">介護支援ボット</h1>
+    <nav style="display:flex; justify-content:center; gap:1rem; margin:1rem 0;">
+      <a href="/" class="btn btn-primary">ホーム</a>
+      <a href="/ja/" class="btn btn-primary">介護支援ボット</a>
+      <a href="/camera-test/" class="btn btn-outline-secondary">カメラテスト</a>
+    </nav>
   </header>
+
   <main>
-    <div id="chat-container">
+    <!-- Stripe 請求デモ -->
+    <section id="invoice-demo" style="text-align:center; margin-bottom:2rem;">
+      <h2>Stripe インボイス発行デモ</h2>
+      <form method="POST" action="/create_invoice">
+        <button type="submit" class="btn btn-success">インボイスを発行</button>
+      </form>
+    </section>
+
+    <!-- 介護支援チャットボット -->
+    <section id="chat-ui">
+      <h2>介護支援チャットボット</h2>
       <div id="chat-window">
-        <!-- メッセージが追加されます -->
+        <!-- メッセージがここに追加されます -->
       </div>
 
       <div class="input-panel">
@@ -62,34 +71,9 @@
         <button id="save-log-btn">会話ログ保存</button>
         <button id="daily-report-btn">📝 日報を生成</button>
       </div>
-    </div>
+    </section>
   </main>
+
   <script src="{{ url_for('static', filename='js/chatbot.v3.js') }}"></script>
-</body>
-</html>
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AIみまくん＋インボイスデモ</title>
-  <!-- CSSやスクリプトは既存のものを引き継いでください -->
-</head>
-<body>
-  <h1>介護支援ボット</h1>
-
-  <!-- 既存のチャットUI -->
-  <div id="chat-ui">
-    <!-- ...ここに元々のチャットHTMLが入ります... -->
-  </div>
-
-  <!-- 追加：インボイス発行 -->
-  <section id="invoice-area" style="margin:40px 0; padding:20px; border:1px solid #ccc;">
-    <h2>インボイス発行デモ</h2>
-    <p>以下をクリックするとテストモードで請求を発行し、支払いページへ飛びます。</p>
-    <form action="/create_invoice" method="post">
-      <button type="submit">インボイス発行</button>
-    </form>
-  </section>
 </body>
 </html>
