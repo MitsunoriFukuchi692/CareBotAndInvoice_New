@@ -7,7 +7,7 @@ from io import BytesIO
 from datetime import datetime, timedelta
 from flask import (
     Flask, render_template, request,
-    jsonify, redirect, send_from_directory, send_file
+    jsonify, redirect, send_from_directory, send_file, Blueprint
 )
 from flask_cors import CORS
 from flask_limiter import Limiter
@@ -45,6 +45,22 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 client = OpenAI(api_key=openai.api_key)
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 
+# ------------------ CameraTest Blueprint ------------------
+camera_bp = Blueprint(
+    "camera_test",
+    __name__,
+    template_folder="CameraTest/templates",
+    static_folder="CameraTest/static",
+    static_url_path="/camera-test/static"
+)
+
+@camera_bp.route("/")
+def camera_index():
+    return render_template("index.html")
+
+# Blueprint 登録
+app.register_blueprint(camera_bp, url_prefix="/camera-test")
+
 @app.after_request
 def add_header(response):
     # キャッシュ無効化ヘッダー
@@ -61,11 +77,9 @@ def serve_spa(path):
     - static 下のファイルが存在すれば配信
     - それ以外は templates/index.html をレンダリング
     """
-    # 静的リソース
     static_path = os.path.join(app.static_folder, path)
     if path and os.path.isfile(static_path):
         return send_from_directory(app.static_folder, path)
-    # SPA entry
     return render_template('index.html')
 
 # ------------------ API Endpoints ------------------
@@ -74,9 +88,9 @@ def get_templates():
     return jsonify([
         {"category": "体調", "caregiver": ["体調はいかがですか？", "痛みはありますか？"], "caree": ["元気です。", "今日は少しだるいです。"]},
         {"category": "食事", "caregiver": ["お食事は何を召し上がりましたか？", "美味しかったですか？"], "caree": ["サンドイッチを食べました。", "まだ食べていません。"]},
-        {"category": "薬",   "caregiver": ["お薬は飲みましたか？", "飲み忘れはないですか？"], "caree": ["飲みました。", "まだです。"]},
+        {"category": "薬",   "caregiver": ["お薬は飲みましたか？", "飲み忘れはないですか？"],      "caree": ["飲みました。", "まだです。"]},
         {"category": "睡眠", "caregiver": ["昨夜はよく眠れましたか？", "何時にお休みになりましたか？"], "caree": ["よく眠れました。", "少し寝不足です。"]},
-        {"category": "排便", "caregiver": ["お通じはいかがですか？", "問題ありませんか？"], "caree": ["問題ありません。", "少し便秘気味です。"]}
+        {"category": "排便", "caregiver": ["お通じはいかがですか？", "問題ありませんか？"],      "caree": ["問題ありません。", "少し便秘気味です。"]}
     ])
 
 @app.route("/ja/chat", methods=["POST"])
