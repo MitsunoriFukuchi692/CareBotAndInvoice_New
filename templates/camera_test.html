@@ -2,17 +2,28 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Camera Test</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>カメラ実験ページ</title>
   <style>
     body { font-family: sans-serif; text-align: center; margin-top: 2rem; }
-    video { border: 1px solid #ccc; border-radius: 4px; }
+    video, img { border: 1px solid #ccc; border-radius: 4px; display: block; margin: 1rem auto; }
+    button { margin: 0.5rem; padding: 0.5rem 1rem; font-size: 1rem; }
   </style>
 </head>
 <body>
-  <h1>カメラアクセス実験ページ</h1>
-  <p>「許可」を押すとカメラ映像が表示されます。</p>
+  <h1>カメラ実験ページ</h1>
+
+  <!-- ライブ映像 -->
   <video id="video" autoplay playsinline width="320" height="240"></video>
+
+  <!-- ① 10秒間 動画撮影 -->
+  <button id="record-btn">10秒間 動画撮影</button>
+  <video id="recorded" controls width="320" height="240" style="display:none"></video>
+
+  <!-- ② 写真を撮る -->
+  <button id="snap-btn">写真を撮る</button>
+  <img id="snapshot" width="320" height="240" style="display:none" />
+
   <script src="/static/js/camera.js"></script>
 </body>
 </html>
