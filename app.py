@@ -1,5 +1,4 @@
 import os
-import json
 import glob
 import logging
 import tempfile
@@ -78,15 +77,6 @@ def upload_media():
 @app.route("/uploads/<path:filename>", methods=["GET"])
 def serve_upload(filename):
     return send_from_directory(UPLOAD_DIR, filename)
-
-# ─── SPA キャッチオール ─────────────────────────────────
-@app.route("/", defaults={"path": ""})
-@app.route("/<path:path>")
-def serve_spa(path):
-    full = os.path.join(app.static_folder, path)
-    if path and os.path.isfile(full):
-        return send_from_directory(app.static_folder, path)
-    return render_template("index.html")
 
 # ─── /ja/templates ─────────────────────────────────────
 @app.route("/ja/templates", methods=["GET"])
@@ -169,9 +159,8 @@ def save_log():
 
 @app.route("/ja/daily_report", methods=["GET"])
 def daily_report():
-    # ① 作成日時（JST）
+    # ① 作成日時
     now = datetime.utcnow() + timedelta(hours=9)
-
     # ② テキスト日報
     files = sorted(glob.glob("logs/log_*.txt"))
     text_report = "ログがありません"
@@ -185,8 +174,7 @@ def daily_report():
             ]
         )
         text_report = resp.choices[0].message.content.strip()
-
-    # ③ 当日のメディア一覧
+    # ③ メディア一覧
     all_media = os.listdir(UPLOAD_DIR)
     images = [f for f in all_media if f.startswith("image_")]
     videos = [f for f in all_media if f.startswith("video_")]
@@ -217,6 +205,7 @@ def chat_tts():
         reply = gpt.choices[0].message.content.strip()
         if len(reply) > 200:
             reply = reply[:197] + "..."
+        # 音声合成
         tts = texttospeech.TextToSpeechClient()
         audio = tts.synthesize_speech(
             input=texttospeech.SynthesisInput(text=reply),
