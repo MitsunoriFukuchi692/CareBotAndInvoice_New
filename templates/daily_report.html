@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>本日の見守りレポート</title>
+  <style>
+    body { font-family: sans-serif; padding: 1rem; }
+    h1 { text-align: center; }
+    section { margin-bottom: 2rem; }
+    img, video { display: block; margin: 0.5rem auto; max-width: 90%; border: 1px solid #ccc; }
+  </style>
+</head>
+<body>
+  <h1>本日の見守りレポート</h1>
+
+  <section>
+    <h2>1. 会話日報</h2>
+    <pre>{{ text_report }}</pre>
+  </section>
+
+  <section>
+    <h2>2. 撮影画像</h2>
+    {% for img in images %}
+      <img src="{{ url_for('serve_upload', filename=img) }}" alt="{{ img }}">
+    {% else %}
+      <p>撮影画像はありません。</p>
+    {% endfor %}
+  </section>
+
+  <section>
+    <h2>3. 録画動画</h2>
+    {% for vid in videos %}
+      <video controls src="{{ url_for('serve_upload', filename=vid) }}"></video>
+    {% else %}
+      <p>録画動画はありません。</p>
+    {% endfor %}
+  </section>
+</body>
+</html>
