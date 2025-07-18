@@ -56,8 +56,9 @@ camera_bp = Blueprint(
     static_url_path="/camera-test/static"
 )
 
-@camera_bp.route("/")
+@camera_bp.route("/", methods=["GET"])
 def camera_index():
+    # CameraTest/templates/index.html を返す
     return render_template("index.html")
 
 # Blueprint を先に登録
@@ -71,32 +72,32 @@ def add_header(response):
     response.headers["Expires"] = "0"
     return response
 
-# ─── SPA Catch-All ルーティング ───────────────────────
-@app.route('/', defaults={'path': ''})
-@app.route('/<path:path>')
+# ─── SPA Catch‑All ルーティング ───────────────────────
+@app.route("/", defaults={"path": ""})
+@app.route("/<path:path>")
 def serve_spa(path):
-    # まず `/camera-test/` は Blueprint 側に委譲
-    if path.startswith('camera-test'):
+    # 1) /camera-test は Blueprint が処理
+    if path.startswith("camera-test"):
         return camera_index()
 
-    # static フォルダ内のファイルがあれば返す
-    static_path = os.path.join(app.static_folder, path)
-    if path and os.path.isfile(static_path):
+    # 2) static フォルダ内のファイルがあれば返す
+    full = os.path.join(app.static_folder, path)
+    if path and os.path.isfile(full):
         return send_from_directory(app.static_folder, path)
 
-    # それ以外は SPA のトップページ
-    return render_template('index.html')
+    # 3) それ以外はメイン SPA
+    return render_template("index.html")
 
 # ─── 既存の API エンドポイント群 ─────────────────────────
 
 @app.route("/ja/templates", methods=["GET"])
 def get_templates():
     return jsonify([
-        {"category": "体調", "caregiver": ["体調はいかがですか？", "痛みはありますか？"], "caree": ["元気です。", "今日は少しだるいです。"]},
-        {"category": "食事", "caregiver": ["お食事は何を召し上がりましたか？", "美味しかったですか？"], "caree": ["サンドイッチを食べました。", "まだ食べていません。"]},
-        {"category": "薬",   "caregiver": ["お薬は飲みましたか？", "飲み忘れはないですか？"],      "caree": ["飲みました。", "まだです。"]},
-        {"category": "睡眠", "caregiver": ["昨夜はよく眠れましたか？", "何時にお休みになりましたか？"], "caree": ["よく眠れました。", "少し寝不足です。"]},
-        {"category": "排便", "caregiver": ["お通じはいかがですか？", "問題ありませんか？"],      "caree": ["問題ありません。", "少し便秘気味です。"]}
+        {"category": "体調", "caregiver": ["体調はいかがですか？","痛みはありますか？"], "caree": ["元気です。","今日は少しだるいです。"]},
+        {"category": "食事", "caregiver": ["お食事は何を召し上がりましたか？","美味しかったですか？"], "caree": ["サンドイッチを食べました。","まだ食べていません。"]},
+        {"category": "薬",   "caregiver": ["お薬は飲みましたか？","飲み忘れはないですか？"],           "caree": ["飲みました。","まだです。"]},
+        {"category": "睡眠", "caregiver": ["昨夜はよく眠れましたか？","何時にお休みになりましたか？"], "caree": ["よく眠れました。","少し寝不足です。"]},
+        {"category": "排便", "caregiver": ["お通じはいかがですか？","問題ありませんか？"],           "caree": ["問題ありません。","少し便秘気味です。"]}
     ])
 
 @app.route("/ja/chat", methods=["POST"])
@@ -245,7 +246,6 @@ def download_logs():
 
 @app.route("/create_invoice", methods=["POST"])
 def create_invoice():
-    # Stripe テストモードのシークレットキーが環境変数に設定されていることを確認してください
     customer = stripe.Customer.create(email="test@example.com", name="テスト顧客")
     stripe.InvoiceItem.create(customer=customer.id, amount=1300, currency="jpy", description="デモ請求")
     invoice = stripe.Invoice.create(customer=customer.id)
