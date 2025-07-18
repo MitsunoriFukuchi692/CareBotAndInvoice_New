@@ -2,17 +2,19 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>本日の見守りレポート</title>
   <style>
     body { font-family: sans-serif; padding: 1rem; }
-    h1 { text-align: center; }
+    h1 { text-align: center; margin-bottom: 0.5rem; }
+    .timestamp { text-align: center; color: #666; margin-bottom: 1.5rem; }
     section { margin-bottom: 2rem; }
-    img, video { display: block; margin: 0.5rem auto; max-width: 90%; border: 1px solid #ccc; }
+    img, video { display: block; margin: 0.5rem auto; max-width: 90%; border: 1px solid #ccc; border-radius: 4px; }
   </style>
 </head>
 <body>
   <h1>本日の見守りレポート</h1>
+  <div class="timestamp">作成日時: {{ now }}</div>
 
   <section>
     <h2>1. 会話日報</h2>
@@ -21,20 +23,24 @@
 
   <section>
     <h2>2. 撮影画像</h2>
-    {% for img in images %}
-      <img src="{{ url_for('serve_upload', filename=img) }}" alt="{{ img }}">
+    {% if images %}
+      {% for img in images %}
+        <img src="{{ url_for('serve_upload', filename=img) }}" alt="{{ img }}">
+      {% endfor %}
     {% else %}
       <p>撮影画像はありません。</p>
-    {% endfor %}
+    {% endif %}
   </section>
 
   <section>
     <h2>3. 録画動画</h2>
-    {% for vid in videos %}
-      <video controls src="{{ url_for('serve_upload', filename=vid) }}"></video>
+    {% if videos %}
+      {% for vid in videos %}
+        <video controls src="{{ url_for('serve_upload', filename=vid) }}"></video>
+      {% endfor %}
     {% else %}
       <p>録画動画はありません。</p>
-    {% endfor %}
+    {% endif %}
   </section>
 </body>
 </html>

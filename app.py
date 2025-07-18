@@ -5,6 +5,7 @@ import logging
 import tempfile
 from io import BytesIO
 from datetime import datetime, timedelta
+
 from flask import (
     Flask, render_template, request,
     jsonify, redirect, send_from_directory,
@@ -87,15 +88,15 @@ def serve_spa(path):
         return send_from_directory(app.static_folder, path)
     return render_template("index.html")
 
-# ─── 既存 /ja テンプレートとAPI群 ──────────────────────────
+# ─── /ja/templates ─────────────────────────────────────
 @app.route("/ja/templates", methods=["GET"])
 def get_templates():
     return jsonify([
-        {"category": "体調",   "caregiver": ["体調はいかがですか？","痛みはありますか？"],  "caree": ["元気です。","今日は少しだるいです。"]},
-        {"category": "食事",   "caregiver": ["お食事は何を召し上がりましたか？","美味しかったですか？"], "caree": ["サンドイッチを食べました。","まだ食べていません。"]},
-        {"category": "薬",     "caregiver": ["お薬は飲みましたか？","飲み忘れはないですか？"],      "caree": ["飲みました。","まだです。"]},
-        {"category": "睡眠",   "caregiver": ["昨夜はよく眠れましたか？","何時にお休みになりましたか？"], "caree": ["よく眠れました。","少し寝不足です。"]},
-        {"category": "排便",   "caregiver": ["お通じはいかがですか？","問題ありませんか？"],      "caree": ["問題ありません。","少し便秘気味です。"]}
+        {"category": "体調", "caregiver": ["体調はいかがですか？","痛みはありますか？"], "caree": ["元気です。","今日は少しだるいです。"]},
+        {"category": "食事", "caregiver": ["お食事は何を召し上がりましたか？","美味しかったですか？"], "caree": ["サンドイッチを食べました。","まだ食べていません。"]},
+        {"category": "薬",   "caregiver": ["お薬は飲みましたか？","飲み忘れはないですか？"],           "caree": ["飲みました。","まだです。"]},
+        {"category": "睡眠", "caregiver": ["昨夜はよく眠れましたか？","何時にお休みになりましたか？"], "caree": ["よく眠れました。","少し寝不足です。"]},
+        {"category": "排便", "caregiver": ["お通じはいかがですか？","問題ありませんか？"],           "caree": ["問題ありません。","少し便秘気味です。"]}
     ])
 
 @app.route("/ja/chat", methods=["POST"])
@@ -106,7 +107,8 @@ def chat_ja():
     try:
         resp = client.chat.completions.create(
             model="gpt-3.5-turbo",
-            messages=[{"role":"system","content":"You are a helpful assistant."}] + messages + [{"role":"user","content":message}]
+            messages=[{"role":"system","content":"You are a helpful assistant."}]
+                      + messages + [{"role":"user","content":message}]
         )
         return jsonify({"response": resp.choices[0].message.content})
     except Exception as e:
@@ -136,7 +138,11 @@ def translate():
     data = request.get_json()
     text = data.get("text", "")
     direction = data.get("direction", "ja-en")
-    prompt = (f"次の日本語を英語に翻訳してください:\n\n{text}" if direction == "ja-en" else f"Translate the following English into Japanese:\n\n{text}")
+    prompt = (
+        f"次の日本語を英語に翻訳してください:\n\n{text}"
+        if direction == "ja-en"
+        else f"Translate the following English into Japanese:\n\n{text}"
+    )
     try:
         resp = client.chat.completions.create(
             model="gpt-3.5-turbo",
@@ -163,7 +169,10 @@ def save_log():
 
 @app.route("/ja/daily_report", methods=["GET"])
 def daily_report():
-    # ① テキスト日報
+    # ① 作成日時（JST）
+    now = datetime.utcnow() + timedelta(hours=9)
+
+    # ② テキスト日報
     files = sorted(glob.glob("logs/log_*.txt"))
     text_report = "ログがありません"
     if files:
@@ -176,13 +185,15 @@ def daily_report():
             ]
         )
         text_report = resp.choices[0].message.content.strip()
-    # ② 本日メディア
-    today = datetime.utcnow().strftime("%Y%m%d")
-    media_files = os.listdir(UPLOAD_DIR)
-    images = [f for f in media_files if f.startswith(f"image_{today}")]
-    videos = [f for f in media_files if f.startswith(f"video_{today}")]
+
+    # ③ 当日のメディア一覧
+    all_media = os.listdir(UPLOAD_DIR)
+    images = [f for f in all_media if f.startswith("image_")]
+    videos = [f for f in all_media if f.startswith("video_")]
+
     return render_template(
         "daily_report.html",
+        now=now.strftime("%Y-%m-%d %H:%M"),
         text_report=text_report,
         images=images,
         videos=videos
@@ -206,7 +217,6 @@ def chat_tts():
         reply = gpt.choices[0].message.content.strip()
         if len(reply) > 200:
             reply = reply[:197] + "..."
-        # 音声合成
         tts = texttospeech.TextToSpeechClient()
         audio = tts.synthesize_speech(
             input=texttospeech.SynthesisInput(text=reply),
