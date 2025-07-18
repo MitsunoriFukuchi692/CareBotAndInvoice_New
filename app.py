@@ -60,6 +60,7 @@ camera_bp = Blueprint(
 def camera_index():
     return render_template("index.html")
 
+# Blueprint を先に登録
 app.register_blueprint(camera_bp, url_prefix="/camera-test")
 
 # ─── キャッシュ無効化ヘッダー ─────────────────────────
@@ -74,12 +75,19 @@ def add_header(response):
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
 def serve_spa(path):
+    # まず `/camera-test/` は Blueprint 側に委譲
+    if path.startswith('camera-test'):
+        return camera_index()
+
+    # static フォルダ内のファイルがあれば返す
     static_path = os.path.join(app.static_folder, path)
     if path and os.path.isfile(static_path):
         return send_from_directory(app.static_folder, path)
+
+    # それ以外は SPA のトップページ
     return render_template('index.html')
 
-# ─── 既存エンドポイント群 ──────────────────────────────
+# ─── 既存の API エンドポイント群 ─────────────────────────
 
 @app.route("/ja/templates", methods=["GET"])
 def get_templates():
@@ -197,7 +205,6 @@ def chat_tts():
         if len(reply) > 200:
             reply = reply[:197] + "..."
 
-        # 音声合成
         tts = texttospeech.TextToSpeechClient()
         audio = tts.synthesize_speech(
             input=texttospeech.SynthesisInput(text=reply),
@@ -211,7 +218,6 @@ def chat_tts():
         with open("static/output.mp3","wb") as f:
             f.write(audio.audio_content)
 
-        # ログ
         with open("chatlog.txt","a",encoding="utf-8") as logf:
             logf.write(f"ユーザー: {text}\nみまくん: {reply}\n---\n")
 
@@ -239,6 +245,7 @@ def download_logs():
 
 @app.route("/create_invoice", methods=["POST"])
 def create_invoice():
+    # Stripe テストモードのシークレットキーが環境変数に設定されていることを確認してください
     customer = stripe.Customer.create(email="test@example.com", name="テスト顧客")
     stripe.InvoiceItem.create(customer=customer.id, amount=1300, currency="jpy", description="デモ請求")
     invoice = stripe.Invoice.create(customer=customer.id)
