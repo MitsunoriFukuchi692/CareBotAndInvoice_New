@@ -1,49 +1,52 @@
 (async () => {
-  const video = document.getElementById("video");
-  const recordBtn = document.getElementById("record-btn");
-  const recorded = document.getElementById("recorded");
-  const snapBtn = document.getElementById("snap-btn");
-  const snapshot = document.getElementById("snapshot");
+  const preview = document.getElementById("preview");
+  const recordBtn = document.getElementById("record-video-btn");
+  const recordedVideo = document.getElementById("recorded-video");
+  const photoBtn = document.getElementById("take-photo-btn");
+  const canvas = document.getElementById("photo-canvas");
+  const uploadBtn = document.getElementById("upload-btn");
 
-  // カメラ映像を取得
-  let stream;
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({ video: true });
-    video.srcObject = stream;
-  } catch (err) {
-    console.error("カメラアクセスに失敗:", err);
-    alert("カメラへのアクセスが許可されませんでした。");
-    return;
-  }
+  // カメラを取得
+  const stream = await navigator.mediaDevices.getUserMedia({ video:true, audio:true });
+  preview.srcObject = stream;
 
-  // ① 10秒間動画録画
-  recordBtn.addEventListener("click", () => {
-    if (!stream) return;
-    const mediaRecorder = new MediaRecorder(stream);
-    let chunks = [];
-    mediaRecorder.ondataavailable = e => chunks.push(e.data);
-    mediaRecorder.onstop = () => {
-      const blob = new Blob(chunks, { type: "video/webm" });
-      recorded.src = URL.createObjectURL(blob);
-      recorded.style.display = "block";
-      chunks = [];
+  let recordedBlob = null;
+  let photoBlob = null;
+
+  // 動画録画
+  recordBtn.onclick = () => {
+    const recorder = new MediaRecorder(stream);
+    const chunks = [];
+    recorder.ondataavailable = e => chunks.push(e.data);
+    recorder.onstop = () => {
+      recordedBlob = new Blob(chunks, { type:"video/webm" });
+      recordedVideo.src = URL.createObjectURL(recordedBlob);
     };
-    mediaRecorder.start();
-    recordBtn.disabled = true;
-    setTimeout(() => {
-      mediaRecorder.stop();
-      recordBtn.disabled = false;
-    }, 10000); // 10秒
-  });
+    recorder.start();
+    setTimeout(() => recorder.stop(), 8_000);
+  };
 
-  // ② 写真撮影
-  snapBtn.addEventListener("click", () => {
-    if (!stream) return;
-    const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    canvas.getContext("2d").drawImage(video, 0, 0);
-    snapshot.src = canvas.toDataURL("image/png");
-    snapshot.style.display = "block";
-  });
+  // 静止画取得
+  photoBtn.onclick = () => {
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(preview, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob(b => { photoBlob = b; }, "image/png");
+  };
+
+  // ★保存＆アップロード
+  uploadBtn.onclick = async () => {
+    const form = new FormData();
+    if (photoBlob) {
+      form.append("media_type", "image");
+      form.append("file", photoBlob, "photo.png");
+      await fetch("/upload_media", { method:"POST", body:form });
+    }
+    if (recordedBlob) {
+      const form2 = new FormData();
+      form2.append("media_type", "video");
+      form2.append("file", recordedBlob, "movie.webm");
+      await fetch("/upload_media", { method:"POST", body:form2 });
+    }
+    alert("保存＆アップロードしました");
+  };
 })();
