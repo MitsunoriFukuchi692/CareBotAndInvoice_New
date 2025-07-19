@@ -8,7 +8,23 @@
     body { font-family: sans-serif; text-align: center; margin-top: 2rem; }
     video, img { border: 1px solid #ccc; border-radius: 4px; display: block; margin: 1rem auto; }
     button { margin: 0.5rem; padding: 0.5rem 1rem; font-size: 1rem; }
+  
+    /* 横幅100%以内に収まり、縦横比を維持 */
+    video, canvas {
+      display: block;
+      max-width: 100%;
+      height: auto;
+      margin: 0 auto 1em;
+      border: 1px solid #ccc;
+    }
+    button {
+      display: block;
+      margin: 0.5em auto;
+      padding: 0.5em 1em;
+      font-size: 1rem;
+    }
   </style>
+
 </head>
 <body>
   <h1>カメラ実験ページ</h1>
