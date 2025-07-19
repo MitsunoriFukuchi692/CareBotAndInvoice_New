@@ -58,8 +58,8 @@ def index_ja():
 
 # 2. 介護支援ボット画面
 @app.route("/ja/", methods=["GET"])
-def index_ja():
-    return render_template("ja/index.html")
+def show_ja_index():
+    return render_template("index.html")
 
 # 3. 本日の見守りレポート
 @app.route("/ja/daily_report", methods=["GET"])
