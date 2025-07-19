@@ -52,8 +52,8 @@ def add_header(response):
     return response
 
 # 1. トップ画面
-@app.route("/", methods=["GET"])
-def index():
+@app.route("/ja/", methods=["GET"])
+def index_ja():
     return render_template("index.html")
 
 # 2. 介護支援ボット画面
