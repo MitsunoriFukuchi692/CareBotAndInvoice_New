@@ -15,12 +15,18 @@
 
   // 動画録画
   recordBtn.onclick = () => {
-    const recorder = new MediaRecorder(stream);
+    let options = { mimeType: "video/mp4" };
+// Safari（iOS Chrome）の場合は webm だと動かないので mp4 を試す
+if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+  options = { mimeType: "video/webm" };
+}
+
+const recorder = new MediaRecorder(stream, options);
     const chunks = [];
     recorder.ondataavailable = e => chunks.push(e.data);
     recorder.onstop = () => {
-      recordedBlob = new Blob(chunks, { type:"video/webm" });
-      recordedVideo.src = URL.createObjectURL(recordedBlob);
+      recordedBlob = new Blob(chunks, { type: options.mimeType });
+  recordedVideo.src = URL.createObjectURL(recordedBlob);
     };
     recorder.start();
     setTimeout(() => recorder.stop(), 8_000);

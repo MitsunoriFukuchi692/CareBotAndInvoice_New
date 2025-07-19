@@ -5,45 +5,54 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>カメラ実験ページ</title>
   <style>
-    body { font-family: sans-serif; text-align: center; margin-top: 2rem; }
-    video, img { border: 1px solid #ccc; border-radius: 4px; display: block; margin: 1rem auto; }
-    button { margin: 0.5rem; padding: 0.5rem 1rem; font-size: 1rem; }
-  
-    /* 横幅100%以内に収まり、縦横比を維持 */
-    video, canvas {
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      padding: 1rem;
+    }
+    h1 {
+      margin-bottom: 1rem;
+    }
+    video, canvas, img {
       display: block;
       max-width: 100%;
       height: auto;
-      margin: 0 auto 1em;
+      object-fit: contain;
+      margin: 0.5rem auto;
       border: 1px solid #ccc;
+      border-radius: 4px;
     }
     button {
-      display: block;
-      margin: 0.5em auto;
-      padding: 0.5em 1em;
+      display: inline-block;
+      margin: 0.5rem;
+      padding: 0.5rem 1rem;
       font-size: 1rem;
+      border: none;
+      border-radius: 4px;
+      background: #007bff;
+      color: white;
+    }
+    button:hover {
+      background: #0056b3;
+      cursor: pointer;
     }
   </style>
-
 </head>
 <body>
   <h1>カメラ実験ページ</h1>
 
   <!-- ビデオプレビュー -->
-  <video id="preview" autoplay playsinline style="width:320px; height:240px;"></video>
-  <br>
+  <video id="preview" autoplay playsinline></video>
 
   <!-- 録画コントロール -->
   <button id="record-video-btn">8秒間 動画撮影</button>
-  <video id="recorded-video" controls style="display:block; width:320px; margin-top:10px;"></video>
-  <br>
+  <video id="recorded-video" controls></video>
 
   <!-- 静止画コントロール -->
   <button id="take-photo-btn">写真を撮る</button>
-  <canvas id="photo-canvas" width="320" height="240" style="display:block; margin-top:10px;"></canvas>
-  <br>
+  <canvas id="photo-canvas" width="320" height="240"></canvas>
 
-  <!-- ★ここにアップロードボタンを追加！ -->
+  <!-- アップロードボタン -->
   <button id="upload-btn">保存＆アップロード</button>
 
   <script src="{{ url_for('static', filename='js/camera.js') }}"></script>

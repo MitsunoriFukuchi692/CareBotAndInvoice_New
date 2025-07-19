@@ -5,11 +5,41 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>本日の見守りレポート</title>
   <style>
-    body { font-family: sans-serif; padding: 1rem; }
-    h1 { text-align: center; margin-bottom: 0.5rem; }
-    .timestamp { text-align: center; color: #666; margin-bottom: 1.5rem; }
-    section { margin-bottom: 2rem; }
-    img, video { display: block; margin: 0.5rem auto; max-width: 90%; border: 1px solid #ccc; border-radius: 4px; }
+    body {
+      font-family: sans-serif;
+      padding: 1rem;
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 0.5rem;
+    }
+    .timestamp {
+      text-align: center;
+      color: #666;
+      margin-bottom: 1.5rem;
+    }
+    section {
+      margin-bottom: 2rem;
+    }
+    img, video {
+      display: block;
+      max-width: 100%;
+      height: auto;
+      object-fit: contain;
+      margin: 0.5rem auto;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    pre {
+      background: #f8f8f8;
+      padding: 1rem;
+      border-radius: 4px;
+      overflow-x: auto;
+    }
+    h2 {
+      border-bottom: 1px solid #ddd;
+      padding-bottom: 0.5rem;
+    }
   </style>
 </head>
 <body>
@@ -36,7 +66,11 @@
     <h2>3. 録画動画</h2>
     {% if videos %}
       {% for vid in videos %}
-        <video controls src="{{ url_for('serve_upload', filename=vid) }}"></video>
+        <video controls>
+          <source src="{{ url_for('serve_upload', filename=vid) }}"
+                  type="{{ 'video/mp4' if vid.endswith('.mp4') else 'video/webm' }}">
+          お使いのブラウザは動画タグに対応していません。
+        </video>
       {% endfor %}
     {% else %}
       <p>録画動画はありません。</p>
