@@ -1,35 +1,36 @@
 (async () => {
-  const preview = document.getElementById("preview");
-  const recordBtn = document.getElementById("record-video-btn");
-  const recordedVideo = document.getElementById("recorded-video");
-  const photoBtn = document.getElementById("take-photo-btn");
-  const canvas = document.getElementById("photo-canvas");
-  const uploadBtn = document.getElementById("upload-btn");
+  const preview        = document.getElementById("preview");
+  const recordBtn      = document.getElementById("record-video-btn");
+  const recordedVideo  = document.getElementById("recorded-video");
+  const photoBtn       = document.getElementById("take-photo-btn");
+  const canvas         = document.getElementById("photo-canvas");
+  const uploadBtn      = document.getElementById("upload-btn");
 
-  // カメラを取得
-  const stream = await navigator.mediaDevices.getUserMedia({ video:true, audio:true });
+  // カメラ取得
+  const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
   preview.srcObject = stream;
 
   let recordedBlob = null;
-  let photoBlob = null;
+  let photoBlob    = null;
+  let recordMime   = "video/webm";
 
   // 動画録画
   recordBtn.onclick = () => {
     let options = { mimeType: "video/mp4" };
-// Safari（iOS Chrome）の場合は webm だと動かないので mp4 を試す
-if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-  options = { mimeType: "video/webm" };
-}
+    if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+      options = { mimeType: "video/webm" };
+    }
+    recordMime = options.mimeType;
 
-const recorder = new MediaRecorder(stream, options);
-    const chunks = [];
+    const recorder = new MediaRecorder(stream, options);
+    const chunks   = [];
     recorder.ondataavailable = e => chunks.push(e.data);
     recorder.onstop = () => {
-      recordedBlob = new Blob(chunks, { type: options.mimeType });
-  recordedVideo.src = URL.createObjectURL(recordedBlob);
+      recordedBlob = new Blob(chunks, { type: recordMime });
+      recordedVideo.src = URL.createObjectURL(recordedBlob);
     };
     recorder.start();
-    setTimeout(() => recorder.stop(), 8_000);
+    setTimeout(() => recorder.stop(), 8_000);  // 8秒録画
   };
 
   // 静止画取得
@@ -39,19 +40,24 @@ const recorder = new MediaRecorder(stream, options);
     canvas.toBlob(b => { photoBlob = b; }, "image/png");
   };
 
-  // ★保存＆アップロード
+  // 保存＆アップロード
   uploadBtn.onclick = async () => {
-    const form = new FormData();
+    // 画像アップロード
     if (photoBlob) {
-      form.append("media_type", "image");
-      form.append("file", photoBlob, "photo.png");
-      await fetch("/upload_media", { method:"POST", body:form });
+      const formImg = new FormData();
+      formImg.append("media_type", "image");
+      formImg.append("file", photoBlob, "photo.png");
+      const resImg = await fetch("/upload_media", { method: "POST", body: formImg });
+      console.log("image upload:", resImg.status, await resImg.json());
     }
+    // 動画アップロード
     if (recordedBlob) {
-      const form2 = new FormData();
-      form2.append("media_type", "video");
-      form2.append("file", recordedBlob, "movie.webm");
-      await fetch("/upload_media", { method:"POST", body:form2 });
+      const ext = recordMime === "video/mp4" ? "mp4" : "webm";
+      const formVid = new FormData();
+      formVid.append("media_type", "video");
+      formVid.append("file", recordedBlob, `movie.${ext}`);
+      const resVid = await fetch("/upload_media", { method: "POST", body: formVid });
+      console.log("video upload:", resVid.status, await resVid.json());
     }
     alert("保存＆アップロードしました");
   };

@@ -56,7 +56,7 @@ def add_header(response):
 def index():
     return render_template("index.html")
 
-# ─── 2. 介護支援ボット画面 （同じ index.html を表示）────────────
+# ─── 2. 介護支援ボット画面（同じ index.html を表示）────────────
 @app.route("/ja/", methods=["GET"])
 def show_ja_index():
     return render_template("index.html")
@@ -95,20 +95,31 @@ def daily_report():
 def camera_test():
     return render_template("camera_test.html")
 
-# ─── 5. メディアアップロード受信 ───────────────────────
+# ─── 5. メディアアップロード受信（拡張子自動取得版）────────────────
 @app.route("/upload_media", methods=["POST"])
 def upload_media():
     media_type = request.form.get("media_type")
     file = request.files.get("file")
     if not media_type or not file:
         return jsonify({"error": "media_type or file missing"}), 400
+
+    # 元ファイル名から拡張子を取得
+    orig_name = file.filename  # e.g. "movie.mp4" or "photo.png"
+    _, ext = os.path.splitext(orig_name)
+    if not ext:
+        ext = ".webm" if media_type == "video" else ".png"
+
     ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-    ext = "webm" if media_type == "video" else "png"
-    filename = f"{media_type}_{ts}.{ext}"
+    filename = f"{media_type}_{ts}{ext}"
     path = os.path.join(UPLOAD_DIR, filename)
-    file.save(path)
-    logging.debug(f"Saved {media_type} to {path}")
-    return jsonify({"status": "saved", "filename": filename}), 200
+
+    try:
+        file.save(path)
+        logging.debug(f"Saved {media_type} to {path}")
+        return jsonify({"status": "saved", "filename": filename}), 200
+    except Exception as e:
+        logging.exception("upload_media error")
+        return jsonify({"error": str(e)}), 500
 
 # ─── 6. アップロードファイル公開 ───────────────────────────
 @app.route("/uploads/<path:filename>", methods=["GET"])
@@ -195,7 +206,6 @@ def chat_tts():
     reply = gpt.choices[0].message.content.strip()
     if len(reply)>200:
         reply = reply[:197]+"..."
-    # TTS 合成
     tts = texttospeech.TextToSpeechClient()
     audio = tts.synthesize_speech(
         input=texttospeech.SynthesisInput(text=reply),
@@ -233,10 +243,7 @@ def download_logs():
 def create_invoice():
     customer = stripe.Customer.create(email="test@example.com", name="テスト顧客")
     stripe.InvoiceItem.create(
-        customer=customer.id,
-        amount=1300,
-        currency="jpy",
-        description="デモ請求"
+        customer=customer.id, amount=1300, currency="jpy", description="デモ請求"
     )
     invoice = stripe.Invoice.create(customer=customer.id)
     invoice = stripe.Invoice.finalize_invoice(invoice.id)
