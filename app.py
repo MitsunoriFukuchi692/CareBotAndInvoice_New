@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from flask import (
     Flask, render_template, request,
     jsonify, redirect, send_from_directory,
-    send_file, url_for
+    url_for
 )
 from flask_cors import CORS
 from flask_limiter import Limiter
@@ -95,7 +95,7 @@ def daily_report():
 def camera_test():
     return render_template("camera_test.html")
 
-# ─── 5. メディアアップロード受信（拡張子自動取得版）────────────────
+# ─── 5. メディアアップロード受信 ───────────────────────────
 @app.route("/upload_media", methods=["POST"])
 def upload_media():
     media_type = request.form.get("media_type")
@@ -103,8 +103,8 @@ def upload_media():
     if not media_type or not file:
         return jsonify({"error": "media_type or file missing"}), 400
 
-    # 元ファイル名から拡張子を取得
-    orig_name = file.filename  # e.g. "movie.mp4" or "photo.png"
+    # 拡張子自動判断
+    orig_name = file.filename
     _, ext = os.path.splitext(orig_name)
     if not ext:
         ext = ".webm" if media_type == "video" else ".png"
@@ -143,7 +143,8 @@ def chat_ja():
     resp = client.chat.completions.create(
         model="gpt-3.5-turbo",
         messages=[{"role":"system","content":"You are a helpful assistant."}]
-                 + data.get("messages",[]) + [{"role":"user","content":data.get("message","")}]
+                 + data.get("messages",[]) 
+                 + [{"role":"user","content":data.get("message","")}]
     )
     return jsonify({"response": resp.choices[0].message.content})
 
@@ -166,8 +167,9 @@ def translate():
     text = data.get("text","")
     direction = data.get("direction","ja-en")
     prompt = (
-        f"以下の日本語を英語に翻訳してください：\n\n{text}" if direction=="ja-en"
-        else f"Translate the following English into Japanese:\n\n{text}"
+        f"以下の日本語を英語に翻訳してください：\n\n{text}" 
+        if direction=="ja-en" else
+        f"Translate the following English into Japanese:\n\n{text}"
     )
     resp = client.chat.completions.create(
         model="gpt-3.5-turbo",
@@ -239,14 +241,17 @@ def download_logs():
         }
     )
 
+# ─── 8. Stripe Invoice 発行 ───────────────────────────
 @app.route("/create_invoice", methods=["POST"])
 def create_invoice():
+    # テスト／本番は環境変数で stripe.api_key を切り替えているのでここはそのまま
     customer = stripe.Customer.create(email="test@example.com", name="テスト顧客")
     stripe.InvoiceItem.create(
         customer=customer.id, amount=1300, currency="jpy", description="デモ請求"
     )
     invoice = stripe.Invoice.create(customer=customer.id)
     invoice = stripe.Invoice.finalize_invoice(invoice.id)
+    # ← ここを修正: hosted_invoice_url にリダイレクト
     return redirect(invoice.hosted_invoice_url)
 
 # ─── アプリ起動 ─────────────────────────────────────
