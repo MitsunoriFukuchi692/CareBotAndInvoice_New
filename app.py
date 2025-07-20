@@ -37,7 +37,7 @@ limiter = Limiter(app, key_func=get_remote_address, default_limits=["10 per minu
 # ─── API キー設定 ────────────────────────────────────
 openai.api_key = os.getenv("OPENAI_API_KEY")
 client = OpenAI(api_key=openai.api_key)
-stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
+stripe.api_key = os.getenv("STRIPE_SECRET_KEY")  # 本番／テスト切り替えはここで行う
 
 # ─── アップロード保存フォルダ準備 ─────────────────────────
 UPLOAD_DIR = "uploads"
@@ -143,7 +143,7 @@ def chat_ja():
     resp = client.chat.completions.create(
         model="gpt-3.5-turbo",
         messages=[{"role":"system","content":"You are a helpful assistant."}]
-                 + data.get("messages",[]) 
+                 + data.get("messages",[])
                  + [{"role":"user","content":data.get("message","")}]
     )
     return jsonify({"response": resp.choices[0].message.content})
@@ -167,7 +167,7 @@ def translate():
     text = data.get("text","")
     direction = data.get("direction","ja-en")
     prompt = (
-        f"以下の日本語を英語に翻訳してください：\n\n{text}" 
+        f"以下の日本語を英語に翻訳してください：\n\n{text}"
         if direction=="ja-en" else
         f"Translate the following English into Japanese:\n\n{text}"
     )
@@ -196,8 +196,9 @@ def save_log():
 def chat_tts():
     data = request.get_json(force=True)
     text = data.get("text","").strip()
-    if len(text)>100:
-        return jsonify({"reply":"メッセージは100文字以内でお願いします。"}),400
+    if len(text) > 100:
+        return jsonify({"reply":"メッセージは100文字以内でお願いします。"}), 400
+
     gpt = openai.ChatCompletion.create(
         model="gpt-4o",
         messages=[
@@ -206,8 +207,9 @@ def chat_tts():
         ]
     )
     reply = gpt.choices[0].message.content.strip()
-    if len(reply)>200:
-        reply = reply[:197]+"..."
+    if len(reply) > 200:
+        reply = reply[:197] + "..."
+
     tts = texttospeech.TextToSpeechClient()
     audio = tts.synthesize_speech(
         input=texttospeech.SynthesisInput(text=reply),
@@ -217,16 +219,18 @@ def chat_tts():
         audio_config=texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.MP3)
     )
     os.makedirs("static", exist_ok=True)
-    with open("static/output.mp3","wb") as f:
+    with open("static/output.mp3", "wb") as f:
         f.write(audio.audio_content)
-    with open("chatlog.txt","a",encoding="utf-8") as logf:
+
+    with open("chatlog.txt", "a", encoding="utf-8") as logf:
         logf.write(f"ユーザー: {text}\nみまくん: {reply}\n---\n")
+
     return jsonify({"reply": reply})
 
 @app.route("/logs")
 def logs():
     try:
-        text = open("chatlog.txt","r",encoding="utf-8").read()
+        text = open("chatlog.txt", "r", encoding="utf-8").read()
         return f"<pre>{text}</pre><a href='{url_for('download_logs')}'>ログダウンロード</a>"
     except FileNotFoundError:
         return "ログが存在しません。"
@@ -244,14 +248,17 @@ def download_logs():
 # ─── 8. Stripe Invoice 発行 ───────────────────────────
 @app.route("/create_invoice", methods=["POST"])
 def create_invoice():
-    # テスト／本番は環境変数で stripe.api_key を切り替えているのでここはそのまま
+    # 環境変数でテスト/本番キーを切り替えているので、ここはそのまま
     customer = stripe.Customer.create(email="test@example.com", name="テスト顧客")
     stripe.InvoiceItem.create(
-        customer=customer.id, amount=1300, currency="jpy", description="デモ請求"
+        customer=customer.id,
+        amount=1300,
+        currency="jpy",
+        description="デモ請求"
     )
     invoice = stripe.Invoice.create(customer=customer.id)
     invoice = stripe.Invoice.finalize_invoice(invoice.id)
-    # ← ここを修正: hosted_invoice_url にリダイレクト
+    # finalized invoice の hosted_invoice_url へリダイレクト
     return redirect(invoice.hosted_invoice_url)
 
 # ─── アプリ起動 ─────────────────────────────────────
