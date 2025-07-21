@@ -143,8 +143,6 @@ def chat_ja():
     resp = client.chat.completions.create(
         model="gpt-3.5-turbo",
         messages=[{"role":"system","content":"You are a helpful assistant."}]
-                 + data.get("messages",[])
-                 + [{"role":"user","content":data.get("message","")}]
     )
     return jsonify({"response": resp.choices[0].message.content})
 
@@ -248,17 +246,28 @@ def download_logs():
 # ─── 8. Stripe Invoice 発行 ───────────────────────────
 @app.route("/create_invoice", methods=["POST"])
 def create_invoice():
-    # 環境変数でテスト/本番キーを切り替えているので、ここはそのまま
-    customer = stripe.Customer.create(email="test@example.com", name="テスト顧客")
+    # 環境変数で STRIPE_SECRET_KEY が切り替わっているものとする
+    # 1) 顧客作成
+    customer = stripe.Customer.create(
+        email="test@example.com",
+        name="テスト顧客"
+    )
+    # 2) 請求アイテム作成
     stripe.InvoiceItem.create(
         customer=customer.id,
         amount=1300,
         currency="jpy",
         description="デモ請求"
     )
-    invoice = stripe.Invoice.create(customer=customer.id)
+    # 3) Invoice 作成（未払い状態）
+    invoice = stripe.Invoice.create(
+        customer=customer.id,
+        auto_advance=False,               # 即時最終化しない
+        collection_method="send_invoice"  # 請求書モードにする
+    )
+    # 4) サーバー側で明示的に最終化
     invoice = stripe.Invoice.finalize_invoice(invoice.id)
-    # finalized invoice の hosted_invoice_url へリダイレクト
+    # 5) 請求書ページへリダイレクト
     return redirect(invoice.hosted_invoice_url)
 
 # ─── アプリ起動 ─────────────────────────────────────
