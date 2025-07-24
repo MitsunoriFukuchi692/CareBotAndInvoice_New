@@ -5,12 +5,31 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>AIみまくん＋インボイスデモ</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+  <style>
+    .btn {
+      padding: 8px 16px;
+      border-radius: 4px;
+      text-decoration: none;
+      font-size: 1em;
+      display: inline-block;
+    }
+    .btn-outline-primary {
+      color: #007bff;
+      border: 1px solid #007bff;
+    }
+    .btn-outline-primary:hover {
+      background-color: #007bff;
+      color: white;
+    }
+  </style>
 </head>
 <body>
   <!-- ナビゲーション -->
   <header>
     <nav style="display:flex; justify-content:center; gap:1rem; margin:1rem 0;">
-      <a href="https://robostudy.jp/test/index.html/" class="btn btn-outline-primary" target="_blank">🏠 ホーム</a>
+      <a href="https://robostudy.jp" style="padding:10px; background:#fff9dc; color:#000; text-decoration:none; border-radius:5px; font-weight:bold;">
+        🏠 ホーム
+      </a>
       <a href="/camera-test/" class="btn btn-outline-secondary" target="_blank" rel="noopener">カメラテスト</a>
       <a href="/ja/daily_report" class="btn btn-outline-secondary" target="_blank" rel="noopener">見守りレポート</a>
     </nav>
