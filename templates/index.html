@@ -5,23 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>AIみまくん＋インボイスデモ</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
-  <style>
-    .btn {
-      padding: 8px 16px;
-      border-radius: 4px;
-      text-decoration: none;
-      font-size: 1em;
-      display: inline-block;
-    }
-    .btn-outline-primary {
-      color: #007bff;
-      border: 1px solid #007bff;
-    }
-    .btn-outline-primary:hover {
-      background-color: #007bff;
-      color: white;
-    }
-  </style>
 </head>
 <body>
   <!-- ナビゲーション -->
@@ -36,17 +19,16 @@
   </header>
 
   <main>
-    <!-- Stripe 請求デモ 0721消し込み-->
-    <!-- <section id="invoice-demo" style="text-align:center; margin-bottom:2rem;">
-      <h2>Stripe インボイス発行デモ</h2>
-      <form method="POST" action="/create_invoice">
-        <button type="submit" class="btn btn-success">インボイスを発行</button>
-      </form>
-    </section>-->
-
     <!-- 介護支援チャットボット -->
     <section id="chat-ui">
       <h2>介護支援ボット</h2>
+
+      <!-- テンプレートボタン移動先 -->
+      <div style="margin: 1rem 0;">
+        <button id="template-start-btn" class="template-start">テンプレート対話開始</button>
+        <div id="template-buttons"></div>
+      </div>
+
       <div id="chat-window">
         <!-- メッセージがここに追加されます -->
       </div>
@@ -62,9 +44,6 @@
         <button id="mic-caree" onclick="startRecognition('caree-input')">🎤</button>
         <button id="send-caree" onclick="appendMessage('caree', careeInput.value)">送信</button>
       </div>
-
-      
-      <div id="template-buttons"></div>
 
       <div class="tts-panel">
         <label>音量:<input type="range" id="volume-slider" min="0" max="1" step="0.1" value="1"></label>
