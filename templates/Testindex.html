@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>介護支援チャットボット</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+  <h2 id="chat-header">AI介護支援チャット</h2>
+
+  <div id="role-selector">
+    <label><input type="radio" name="role" value="caregiver" checked> 介護士</label>
+    <label><input type="radio" name="role" value="caree"> 被介護者</label>
+  </div>
+
+  <div id="template-buttons" class="template-buttons caregiver">
+    <button>お通じはいかがですか？</button>
+    <button>問題ありませんか？</button>
+  </div>
+
+  <script>
+    const roleRadios = document.querySelectorAll('input[name="role"]');
+    const buttonsDiv = document.getElementById('template-buttons');
+
+    roleRadios.forEach(radio => {
+      radio.addEventListener('change', () => {
+        const selectedRole = document.querySelector('input[name="role"]:checked').value;
+        buttonsDiv.className = `template-buttons ${selectedRole}`;
+        if (selectedRole === 'caregiver') {
+          buttonsDiv.innerHTML = `
+            <button>お通じはいかがですか？</button>
+            <button>問題ありませんか？</button>
+          `;
+        } else {
+          buttonsDiv.innerHTML = `
+            <button>はい、大丈夫です</button>
+            <button>少し便秘気味です</button>
+          `;
+        }
+      });
+    });
+  </script>
+</body>
+</html>
