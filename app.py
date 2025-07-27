@@ -31,6 +31,7 @@ with tempfile.NamedTemporaryFile(delete=False, suffix=".json") as tmp:
 
 # ─── Flask 初期化 ───────────────────────────────────
 app = Flask(__name__, static_folder="static", template_folder="templates")
+app.config['VERSION'] = '20250727'
 CORS(app)
 limiter = Limiter(app, key_func=get_remote_address, default_limits=["10 per minute"])
 
