@@ -8,13 +8,11 @@
 <body>
   <h2 id="chat-header">AI介護支援チャット</h2>
 
-  <!-- 介護士 / 被介護者の選択 -->
   <div id="role-selector">
     <label><input type="radio" name="role" value="caregiver" checked> 介護士</label>
     <label><input type="radio" name="role" value="caree"> 被介護者</label>
   </div>
 
-  <!-- テンプレートボタン -->
   <div id="template-buttons" class="template-buttons caregiver">
     <button>お通じはいかがですか？</button>
     <button>問題ありませんか？</button>
@@ -28,8 +26,6 @@
       radio.addEventListener('change', () => {
         const selectedRole = document.querySelector('input[name="role"]:checked').value;
         buttonsDiv.className = `template-buttons ${selectedRole}`;
-
-        // テンプレートの内容切り替え
         if (selectedRole === 'caregiver') {
           buttonsDiv.innerHTML = `
             <button>お通じはいかがですか？</button>

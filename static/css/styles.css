@@ -343,7 +343,7 @@ html, body { height: 100%; font-family: "Noto Sans JP", sans-serif; background-c
   }
 }
 
-/* テンプレートボタンの中央寄せ＋色分け */
+/* テンプレート切り替えUI */
 #role-selector {
   text-align: center;
   margin-top: 12px;
