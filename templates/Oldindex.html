@@ -6,16 +6,15 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body>
-  <h2 id="chat-header">AI介護支援チャット</h2>
+  <h2>AI介護支援チャット</h2>
 
-  <!-- 介護士 / 被介護者の選択 -->
   <div id="role-selector">
     <label><input type="radio" name="role" value="caregiver" checked> 介護士</label>
     <label><input type="radio" name="role" value="caree"> 被介護者</label>
   </div>
 
-  <!-- テンプレートボタン -->
   <div id="template-buttons" class="template-buttons caregiver">
+    <!-- 初期状態は介護士ボタン -->
     <button>お通じはいかがですか？</button>
     <button>問題ありませんか？</button>
   </div>
@@ -29,7 +28,7 @@
         const selectedRole = document.querySelector('input[name="role"]:checked').value;
         buttonsDiv.className = `template-buttons ${selectedRole}`;
 
-        // テンプレートの内容切り替え
+        // ボタンの内容を入れ替える
         if (selectedRole === 'caregiver') {
           buttonsDiv.innerHTML = `
             <button>お通じはいかがですか？</button>

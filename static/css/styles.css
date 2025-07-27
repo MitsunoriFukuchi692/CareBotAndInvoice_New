@@ -342,3 +342,36 @@ html, body { height: 100%; font-family: "Noto Sans JP", sans-serif; background-c
     margin-bottom: 8px;
   }
 }
+
+/* テンプレートボタンの中央寄せ＋色分け */
+#role-selector {
+  text-align: center;
+  margin-top: 12px;
+  margin-bottom: 8px;
+  font-size: 16px;
+}
+
+.template-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.template-buttons.caregiver button {
+  background-color: #007bff;
+  color: white;
+  border: none;
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.template-buttons.caree button {
+  background-color: #ff9800;
+  color: white;
+  border: none;
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-size: 14px;
+}
