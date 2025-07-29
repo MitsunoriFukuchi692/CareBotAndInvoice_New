@@ -4,9 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>AIみまくん＋インボイスデモ</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
 </head>
 <body>
+  <!-- ナビゲーション -->
   <header>
     <nav style="display:flex; justify-content:center; gap:1rem; margin:1rem 0;">
       <a href="https://robostudy.jp/test/index.html" class="btn btn-outline-primary">🔙 戻る</a>
@@ -16,15 +17,19 @@
   </header>
 
   <main>
+    <!-- 介護支援チャットボット -->
     <section id="chat-ui">
-      <h2>介護支援ボット</h2>
+      <h2 class="center-title">介護支援ボット</h2>
 
-      <div style="margin: 1rem 0;">
+      <!-- テンプレートボタン -->
+      <div class="template-container">
         <button id="template-start-btn" class="template-start">テンプレート対話開始</button>
         <div id="template-buttons"></div>
       </div>
 
-      <div id="chat-window"></div>
+      <div id="chat-window">
+        <!-- メッセージがここに追加されます -->
+      </div>
 
       <div class="input-panel">
         <label class="role-label caregiver" for="caregiver-input">介護士</label>
