@@ -1,47 +1,69 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <title>介護支援チャットボット</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AIみまくん＋インボイスデモ</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body>
-  <h2>AI介護支援チャット</h2>
+  <header>
+    <nav style="display:flex; justify-content:center; gap:1rem; margin:1rem 0;">
+      <a href="https://robostudy.jp/test/index.html" class="btn btn-outline-primary">🔙 戻る</a>
+      <a href="/camera-test/" class="btn btn-outline-secondary" target="_blank" rel="noopener">カメラテスト</a>
+      <a href="/ja/daily_report" class="btn btn-outline-secondary" target="_blank" rel="noopener">見守りレポート</a>
+    </nav>
+  </header>
 
-  <div id="role-selector">
-    <label><input type="radio" name="role" value="caregiver" checked> 介護士</label>
-    <label><input type="radio" name="role" value="caree"> 被介護者</label>
-  </div>
+  <main>
+    <section id="chat-ui">
+     <h2 style="text-align: center;">介護支援ボット</h2>
 
-  <div id="template-buttons" class="template-buttons caregiver">
-    <!-- 初期状態は介護士ボタン -->
-    <button>お通じはいかがですか？</button>
-    <button>問題ありませんか？</button>
-  </div>
+      <div style="display: flex; justify-content: center; margin: 1rem 0;">
+      <button id="template-start-btn" class="template-start">テンプレート対話開始</button>
+      </div>
 
-  <script>
-    const roleRadios = document.querySelectorAll('input[name="role"]');
-    const buttonsDiv = document.getElementById('template-buttons');
+      <div id="template-buttons" style="text-align: center;"></div>
 
-    roleRadios.forEach(radio => {
-      radio.addEventListener('change', () => {
-        const selectedRole = document.querySelector('input[name="role"]:checked').value;
-        buttonsDiv.className = `template-buttons ${selectedRole}`;
+      <div class="input-panel">
+        <label class="role-label caregiver" for="caregiver-input">介護士</label>
+        <input id="caregiver-input" type="text" placeholder="介護士の発言を入力">
+        <button id="mic-caregiver" onclick="startRecognition('caregiver-input')">🎤</button>
+        <button id="send-caregiver" onclick="appendMessage('caregiver', caregiverInput.value)">送信</button>
 
-        // ボタンの内容を入れ替える
-        if (selectedRole === 'caregiver') {
-          buttonsDiv.innerHTML = `
-            <button>お通じはいかがですか？</button>
-            <button>問題ありませんか？</button>
-          `;
-        } else {
-          buttonsDiv.innerHTML = `
-            <button>はい、大丈夫です</button>
-            <button>少し便秘気味です</button>
-          `;
-        }
-      });
-    });
-  </script>
+        <label class="role-label caree" for="caree-input">被介護者</label>
+        <input id="caree-input" type="text" placeholder="被介護者の発言を入力">
+        <button id="mic-caree" onclick="startRecognition('caree-input')">🎤</button>
+        <button id="send-caree" onclick="appendMessage('caree', careeInput.value)">送信</button>
+      </div>
+
+      <div class="tts-panel">
+        <label>音量:<input type="range" id="volume-slider" min="0" max="1" step="0.1" value="1"></label>
+        <label>速度:<input type="range" id="rate-slider" min="0.5" max="2" step="0.1" value="1"></label>
+      </div>
+
+      <div id="glossary">
+        <input type="text" id="term" placeholder="用語を入力">
+        <button id="explain-btn">説明</button>
+        <p id="explanation"></p>
+      </div>
+
+      <div id="translation-panel">
+        <select id="translate-direction">
+          <option value="ja-en" selected>日本語→英語</option>
+          <option value="en-ja">英語→日本語</option>
+        </select>
+        <button id="translate-btn">翻訳</button>
+        <p id="translation-result"></p>
+      </div>
+
+      <div class="action-buttons">
+        <button id="save-log-btn">会話ログ保存</button>
+        <button id="daily-report-btn" onclick="window.open('/ja/daily_report','_blank')">📝 日報を生成</button>
+      </div>
+    </section>
+  </main>
+
+  <script src="{{ url_for('static', filename='js/chatbot.v3.js') }}"></script>
 </body>
 </html>
