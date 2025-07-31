@@ -44,7 +44,6 @@ document.addEventListener("DOMContentLoaded", () => {
     chatWindow.appendChild(div);
     chatWindow.scrollTop = chatWindow.scrollHeight;
 
-    // 🔊 読み上げ
     speak(text, role);
   }
 
@@ -56,12 +55,10 @@ document.addEventListener("DOMContentLoaded", () => {
     utter.rate = 1.0;
 
     if (role === "caregiver" || role === "caree") {
-      utter.lang = "ja-JP"; // 日本語会話
+      utter.lang = "ja-JP"; // 日本語
     }
-    if (role === "caregiver") {
-      utter.voice = speechSynthesis.getVoices().find(v => v.lang === "ja-JP" && v.name.includes("Male")) || null;
-    } else if (role === "caree") {
-      utter.voice = speechSynthesis.getVoices().find(v => v.lang === "ja-JP" && v.name.includes("Female")) || null;
+    if (role === "translation") {
+      utter.lang = "en-US"; // 英語（アメリカ発音）
     }
     window.speechSynthesis.speak(utter);
   }
@@ -70,7 +67,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function showTemplates(role, category = null) {
     templateContainer.innerHTML = "";
 
-    // ステップ1: カテゴリ選択
+    // カテゴリ選択
     if (!category) {
       const categories = Object.keys(caregiverTemplates);
       templateContainer.className = "template-buttons category";
@@ -83,7 +80,7 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    // ステップ2: 質問／返答
+    // 質問 / 返答
     let templates = [];
     if (role === "caregiver") {
       templates = caregiverTemplates[category];
@@ -99,51 +96,72 @@ document.addEventListener("DOMContentLoaded", () => {
       btn.addEventListener("click", () => {
         appendMessage(role, text);
         if (role === "caregiver") {
-          showTemplates("caree", category);  // 次は被介護者
+          showTemplates("caree", category);
         } else {
-          showTemplates("caregiver");        // 回答後はカテゴリ選択に戻る
+          showTemplates("caregiver");
         }
       });
       templateContainer.appendChild(btn);
     });
   }
 
-  // === ボタンイベント ===
-  if (templateStartBtn) {
-    templateStartBtn.addEventListener("click", () => {
-      templateStartBtn.style.display = "none";
-      showTemplates("caregiver");
+  // === 会話ログ保存 ===
+  if (saveBtn) {
+    saveBtn.addEventListener("click", async () => {
+      const log = chatWindow.innerText.trim();
+      if (!log) {
+        alert("会話がありません");
+        return;
+      }
+      const now = new Date();
+      const timestamp = now.toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" });
+      const logWithTime = `[${timestamp}]\n${log}`;
+      try {
+        const res = await fetch("/ja/save_log", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ log: logWithTime })
+        });
+        const data = await res.json();
+        if (data.status === "success") {
+          alert("会話ログを保存しました。");
+        } else {
+          alert("保存に失敗しました。");
+        }
+      } catch (err) {
+        alert("エラーが発生しました。");
+        console.error(err);
+      }
     });
   }
 
+  // === 音声認識 ===
+  function setupMic(button, input) {
+    if (button) {
+      button.addEventListener("click", () => {
+        const rec = new webkitSpeechRecognition();
+        rec.lang = "ja-JP";
+        rec.onresult = e => input.value = e.results[0][0].transcript;
+        rec.start();
+      });
+    }
+  }
+  setupMic(caregiverMic, caregiverInput);
+  setupMic(careeMic, careeInput);
+
+  // === 入力送信 ===
   if (caregiverSend) caregiverSend.addEventListener("click", () => {
-    appendMessage("caregiver", caregiverInput.value);
-    caregiverInput.value = "";
+    if (caregiverInput.value.trim()) {
+      appendMessage("caregiver", caregiverInput.value);
+      caregiverInput.value = "";
+    }
   });
   if (careeSend) careeSend.addEventListener("click", () => {
-    appendMessage("caree", careeInput.value);
-    careeInput.value = "";
+    if (careeInput.value.trim()) {
+      appendMessage("caree", careeInput.value);
+      careeInput.value = "";
+    }
   });
-
-  // 音声認識（介護士）
-  if (caregiverMic) {
-    caregiverMic.addEventListener("click", () => {
-      const rec = new webkitSpeechRecognition();
-      rec.lang = "ja-JP";
-      rec.onresult = e => caregiverInput.value = e.results[0][0].transcript;
-      rec.start();
-    });
-  }
-
-  // 音声認識（被介護者）
-  if (careeMic) {
-    careeMic.addEventListener("click", () => {
-      const rec = new webkitSpeechRecognition();
-      rec.lang = "ja-JP";
-      rec.onresult = e => careeInput.value = e.results[0][0].transcript;
-      rec.start();
-    });
-  }
 
   // === 用語説明 ===
   if (explainBtn) {
@@ -161,7 +179,7 @@ document.addEventListener("DOMContentLoaded", () => {
         });
         const data = await res.json();
         document.getElementById("explanation").textContent = data.explanation;
-        speak(data.explanation, "caregiver"); // 🔊 日本語で読み上げ
+        speak(data.explanation, "caregiver");
       } catch (err) {
         alert("用語説明に失敗しました");
         console.error(err);
@@ -185,17 +203,19 @@ document.addEventListener("DOMContentLoaded", () => {
         });
         const data = await res.json();
         document.getElementById("translation-result").textContent = data.translated;
-
-        // 🔊 英語をアメリカ英語で読み上げ
-        const utter = new SpeechSynthesisUtterance(data.translated);
-        utter.lang = "en-US";  // アメリカ英語発音
-        utter.rate = 1.0;
-        utter.volume = 1.0;
-        window.speechSynthesis.speak(utter);
+        speak(data.translated, "translation"); // 🔊 英語を米国発音で読み上げ
       } catch (err) {
         alert("翻訳に失敗しました");
         console.error(err);
       }
+    });
+  }
+
+  // === テンプレート開始 ===
+  if (templateStartBtn) {
+    templateStartBtn.addEventListener("click", () => {
+      templateStartBtn.style.display = "none";
+      showTemplates("caregiver");
     });
   }
 });
