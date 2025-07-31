@@ -87,33 +87,41 @@ html, body {
 }
 
 /* テンプレート切り替えUI */
-#role-selector {
-  text-align: center;
-  margin-top: 12px;
-  margin-bottom: 8px;
-  font-size: 16px;
-}
 .template-buttons {
   display: flex;
+  flex-wrap: wrap;
   justify-content: center;
   gap: 10px;
-  margin-bottom: 20px;
+  margin: 16px 0;
 }
+.template-buttons button {
+  font-size: 1.2rem; /* 大きめ */
+  padding: 12px 20px;
+  margin: 6px;
+  border-radius: 8px;
+  cursor: pointer;
+  border: none;
+}
+
+/* カテゴリー選択ボタン */
+.template-buttons.category button {
+  background-color: #6c757d;
+  color: white;
+  font-weight: bold;
+}
+
+/* 介護士テンプレート */
 .template-buttons.caregiver button {
   background-color: #007bff;
   color: white;
-  border: none;
-  padding: 8px 14px;
-  border-radius: 6px;
-  font-size: 14px;
+  font-weight: bold;
 }
+
+/* 被介護者テンプレート */
 .template-buttons.caree button {
   background-color: #ff9800;
   color: white;
-  border: none;
-  padding: 8px 14px;
-  border-radius: 6px;
-  font-size: 14px;
+  font-weight: bold;
 }
 
 /* その他機能のUI */
@@ -183,33 +191,11 @@ html, body {
   }
 }
 
-/* タイトルとテンプレート開始ボタンの調整 */
+/* タイトル */
 .chat-title {
-  text-align: center;
-  font-size: 1.8rem;   /* 大きめの文字 */
-  margin-bottom: 1rem;
-  color: #333;
-}
-
-.template-start {
-  font-size: 1.2rem;   /* ボタン文字を大きめに */
-  padding: 10px 20px;
-  background-color: #28a745;
-  color: white;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-}
-.template-start:hover {
-  background-color: #218838;
-}
-
-/* タイトル調整（中央寄せ・色・サイズ強調） */
-.chat-title {
-  text-align: center !important;   /* 中央寄せを強制 */
-  font-size: 2rem;                 /* 大きめの文字 */
-  font-weight: bold;               /* 太字 */
-  color: #007bff;                  /* 青色にする */
+  text-align: center !important;
+  font-size: 2rem;
+  font-weight: bold;
+  color: #007bff;
   margin: 1rem 0;
 }
-
