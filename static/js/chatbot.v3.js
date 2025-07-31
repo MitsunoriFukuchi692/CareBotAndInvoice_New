@@ -52,10 +52,12 @@ document.addEventListener("DOMContentLoaded", () => {
   function speak(text, role) {
     if (!text) return;
     const utter = new SpeechSynthesisUtterance(text);
-    utter.lang = "ja-JP";
     utter.volume = 1.0;
     utter.rate = 1.0;
-    // 声の指定（環境により異なるため fallback）
+
+    if (role === "caregiver" || role === "caree") {
+      utter.lang = "ja-JP"; // 日本語会話
+    }
     if (role === "caregiver") {
       utter.voice = speechSynthesis.getVoices().find(v => v.lang === "ja-JP" && v.name.includes("Male")) || null;
     } else if (role === "caree") {
@@ -140,6 +142,60 @@ document.addEventListener("DOMContentLoaded", () => {
       rec.lang = "ja-JP";
       rec.onresult = e => careeInput.value = e.results[0][0].transcript;
       rec.start();
+    });
+  }
+
+  // === 用語説明 ===
+  if (explainBtn) {
+    explainBtn.addEventListener("click", async () => {
+      const term = document.getElementById("term").value.trim();
+      if (!term) {
+        alert("用語を入力してください");
+        return;
+      }
+      try {
+        const res = await fetch("/ja/explain", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ term, maxLength: 30 })
+        });
+        const data = await res.json();
+        document.getElementById("explanation").textContent = data.explanation;
+        speak(data.explanation, "caregiver"); // 🔊 日本語で読み上げ
+      } catch (err) {
+        alert("用語説明に失敗しました");
+        console.error(err);
+      }
+    });
+  }
+
+  // === 翻訳 ===
+  if (translateBtn) {
+    translateBtn.addEventListener("click", async () => {
+      const text = document.getElementById("explanation").textContent.trim();
+      if (!text) {
+        alert("先に用語説明を入れてください");
+        return;
+      }
+      try {
+        const res = await fetch("/ja/translate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text, direction: "ja-en" })
+        });
+        const data = await res.json();
+        document.getElementById("translation-result").textContent = data.translated;
+
+        // 🔊 英語をアメリカ英語で読み上げ
+        const utter = new SpeechSynthesisUtterance(data.translated);
+        utter.lang = "en-US";  // アメリカ英語発音
+        utter.rate = 1.0;
+        utter.volume = 1.0;
+        window.speechSynthesis.speak(utter);
+      } catch (err) {
+        alert("翻訳に失敗しました");
+        console.error(err);
+      }
     });
   }
 });
