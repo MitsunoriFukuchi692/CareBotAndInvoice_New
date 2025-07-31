@@ -33,13 +33,7 @@ with tempfile.NamedTemporaryFile(delete=False, suffix=".json") as tmp:
 app = Flask(__name__, static_folder="static", template_folder="templates")
 app.config['VERSION'] = '20250727'
 CORS(app)
-
-# Flask-Limiter 初期化（新しい書き方）
-limiter = Limiter(
-    key_func=get_remote_address,
-    default_limits=["10 per minute"]
-)
-limiter.init_app(app)
+limiter = Limiter(app, key_func=get_remote_address, default_limits=["10 per minute"])
 
 # ─── API キー設定 ────────────────────────────────────
 openai.api_key = os.getenv("OPENAI_API_KEY")
