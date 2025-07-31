@@ -1,3 +1,8 @@
+let currentStream = null;
+let recordedBlob = null;
+let photoBlob = null;
+let recordMime = "video/webm";
+
 (async () => {
   const preview        = document.getElementById("preview");
   const recordBtn      = document.getElementById("record-video-btn");
@@ -6,41 +11,72 @@
   const canvas         = document.getElementById("photo-canvas");
   const uploadBtn      = document.getElementById("upload-btn");
 
-  // カメラ取得
-  const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-  preview.srcObject = stream;
+  // ===== カメラ起動関数（前面／背面切替用） =====
+  async function startCamera(mode = "environment") {
+    if (currentStream) {
+      currentStream.getTracks().forEach(track => track.stop());
+    }
+    const constraints = {
+      video: {
+        facingMode: (mode === "environment")
+          ? { exact: "environment" }
+          : "user"
+      },
+      audio: true
+    };
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      currentStream = stream;
+      preview.srcObject = stream;
+    } catch (err) {
+      console.error("カメラ起動エラー:", err);
+      alert("カメラが起動できません: " + err.message);
+    }
+  }
 
-  let recordedBlob = null;
-  let photoBlob    = null;
-  let recordMime   = "video/webm";
+  // ページロード時は背面カメラで起動
+  startCamera("environment");
 
-  // 動画録画
+  // 切替ボタン処理
+  document.getElementById("front-btn").onclick = () => startCamera("user");
+  document.getElementById("back-btn").onclick  = () => startCamera("environment");
+
+  // ===== 動画録画 =====
   recordBtn.onclick = () => {
+    if (!currentStream) {
+      alert("カメラが起動していません");
+      return;
+    }
     let options = { mimeType: "video/mp4" };
     if (!MediaRecorder.isTypeSupported(options.mimeType)) {
       options = { mimeType: "video/webm" };
     }
     recordMime = options.mimeType;
 
-    const recorder = new MediaRecorder(stream, options);
+    const recorder = new MediaRecorder(currentStream, options);
     const chunks   = [];
     recorder.ondataavailable = e => chunks.push(e.data);
     recorder.onstop = () => {
       recordedBlob = new Blob(chunks, { type: recordMime });
       recordedVideo.src = URL.createObjectURL(recordedBlob);
+      recordedVideo.controls = true;
     };
     recorder.start();
     setTimeout(() => recorder.stop(), 8_000);  // 8秒録画
   };
 
-  // 静止画取得
+  // ===== 静止画取得 =====
   photoBtn.onclick = () => {
+    if (!currentStream) {
+      alert("カメラが起動していません");
+      return;
+    }
     const ctx = canvas.getContext("2d");
     ctx.drawImage(preview, 0, 0, canvas.width, canvas.height);
     canvas.toBlob(b => { photoBlob = b; }, "image/png");
   };
 
-  // 保存＆アップロード
+  // ===== 保存＆アップロード =====
   uploadBtn.onclick = async () => {
     // 画像アップロード
     if (photoBlob) {
