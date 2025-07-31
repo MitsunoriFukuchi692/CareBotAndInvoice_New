@@ -44,6 +44,12 @@
   <!-- ビデオプレビュー -->
   <video id="preview" autoplay playsinline></video>
 
+  <!-- カメラ切替ボタン -->
+  <div>
+    <button id="front-btn">前面カメラ</button>
+    <button id="back-btn">背面カメラ</button>
+  </div>
+
   <!-- 録画コントロール -->
   <button id="record-video-btn">8秒間 動画撮影</button>
   <video id="recorded-video" controls></video>
@@ -54,6 +60,31 @@
 
   <!-- アップロードボタン -->
   <button id="upload-btn">保存＆アップロード</button>
+
+  <script>
+    const video = document.getElementById("preview");
+    let currentStream = null;
+
+    async function startCamera(mode) {
+      if (currentStream) {
+        currentStream.getTracks().forEach(track => track.stop());
+      }
+      const constraints = { video: { facingMode: mode } };
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        currentStream = stream;
+        video.srcObject = stream;
+      } catch (err) {
+        console.error("カメラ起動エラー:", err);
+      }
+    }
+
+    document.getElementById("front-btn").onclick = () => startCamera("user");
+    document.getElementById("back-btn").onclick = () => startCamera("environment");
+
+    // ページ読み込み時は背面カメラ優先で起動
+    startCamera("environment");
+  </script>
 
   <script src="{{ url_for('static', filename='js/camera.js') }}"></script>
 </body>
