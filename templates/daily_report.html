@@ -78,3 +78,26 @@
   </section>
 </body>
 </html>
+
+<h2>📷 保存された写真</h2>
+{% if images %}
+  {% for img in images %}
+    <div>
+      <img src="{{ url_for('serve_upload', filename=img) }}" alt="写真" width="300">
+    </div>
+  {% endfor %}
+{% else %}
+  <p>写真は保存されていません。</p>
+{% endif %}
+
+<h2>🎥 保存された動画</h2>
+{% if videos %}
+  {% for vid in videos %}
+    <div>
+      <video src="{{ url_for('serve_upload', filename=vid) }}" width="400" controls></video>
+    </div>
+  {% endfor %}
+{% else %}
+  <p>動画は保存されていません。</p>
+{% endif %}
+
