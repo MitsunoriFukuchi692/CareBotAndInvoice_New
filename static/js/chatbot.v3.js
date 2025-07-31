@@ -34,7 +34,7 @@ document.addEventListener("DOMContentLoaded", () => {
     "排便": ["普通でした", "少し便秘気味です", "下痢でした", "昨日ありました"]
   };
 
-  // === メッセージ表示 ===
+  // === メッセージ表示 + 読み上げ ===
   function appendMessage(role, text) {
     const div = document.createElement("div");
     div.classList.add("message");
@@ -43,6 +43,25 @@ document.addEventListener("DOMContentLoaded", () => {
     div.textContent = (role === "caregiver" ? "介護士: " : "被介護者: ") + text;
     chatWindow.appendChild(div);
     chatWindow.scrollTop = chatWindow.scrollHeight;
+
+    // 🔊 読み上げ
+    speak(text, role);
+  }
+
+  // === 音声読み上げ ===
+  function speak(text, role) {
+    if (!text) return;
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = "ja-JP";
+    utter.volume = 1.0;
+    utter.rate = 1.0;
+    // 声の指定（環境により異なるため fallback）
+    if (role === "caregiver") {
+      utter.voice = speechSynthesis.getVoices().find(v => v.lang === "ja-JP" && v.name.includes("Male")) || null;
+    } else if (role === "caree") {
+      utter.voice = speechSynthesis.getVoices().find(v => v.lang === "ja-JP" && v.name.includes("Female")) || null;
+    }
+    window.speechSynthesis.speak(utter);
   }
 
   // === テンプレート表示 ===
