@@ -182,3 +182,34 @@ html, body {
     margin: 4px 0;
   }
 }
+
+/* タイトルとテンプレート開始ボタンの調整 */
+.chat-title {
+  text-align: center;
+  font-size: 1.8rem;   /* 大きめの文字 */
+  margin-bottom: 1rem;
+  color: #333;
+}
+
+.template-start {
+  font-size: 1.2rem;   /* ボタン文字を大きめに */
+  padding: 10px 20px;
+  background-color: #28a745;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.template-start:hover {
+  background-color: #218838;
+}
+
+/* タイトル調整（中央寄せ・色・サイズ強調） */
+.chat-title {
+  text-align: center !important;   /* 中央寄せを強制 */
+  font-size: 2rem;                 /* 大きめの文字 */
+  font-weight: bold;               /* 太字 */
+  color: #007bff;                  /* 青色にする */
+  margin: 1rem 0;
+}
+
