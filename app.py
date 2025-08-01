@@ -194,4 +194,36 @@ def explain_term():
         logging.error(f"用語説明エラー: {e}")
         return jsonify({"error": "用語説明に失敗しました"}), 500
 
+# ─── 翻訳 ───────────────────────────────
+@app.route("/ja/translate", methods=["POST"])
+def translate_text():
+    try:
+        data = request.get_json()
+        text = data.get("text", "")
+        direction = data.get("direction", "ja-en")  # ja-en or en-ja
+
+        if not text:
+            return jsonify({"error": "翻訳するテキストがありません"}), 400
+
+        if direction == "ja-en":
+            system_prompt = "次の日本語を英語に翻訳してください。"
+        else:
+            system_prompt = "次の英語を日本語に翻訳してください。"
+
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": text}
+            ],
+            max_tokens=100
+        )
+        translated = response.choices[0].message.content.strip()
+        return jsonify({"translated": translated})
+
+    except Exception as e:
+        logging.error(f"翻訳エラー: {e}")
+        return jsonify({"error": "翻訳に失敗しました"}), 500
+
+
 # ─── メイン ────────
