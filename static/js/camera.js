@@ -61,7 +61,7 @@ if (backBtn) {
   };
 
   // 静止画撮影
-  photoBtn.onclick = () => {
+ photoBtn.onclick = () => {
   const ctx = canvas.getContext("2d");
   canvas.width = preview.videoWidth || 640;
   canvas.height = preview.videoHeight || 480;
@@ -69,8 +69,8 @@ if (backBtn) {
 
   canvas.toBlob(b => { 
     photoBlob = b; 
-    console.log("📸 写真撮影OK（最新1枚）");
-  }, "image/png", 1.0);  // 高品質カラー
+    console.log("📸 写真撮影OK（最新1枚・JPEGカラー）");
+  }, "image/jpeg", 0.95);  // JPEG形式でカラー保存
 };
 
   // 保存＆アップロード
