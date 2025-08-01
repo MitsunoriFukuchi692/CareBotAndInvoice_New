@@ -14,7 +14,7 @@ from google.cloud import texttospeech
 import openai
 from openai import OpenAI
 import stripe
-from fpdf import FPDF   # ← PDF用追加
+from fpdf import FPDF   # fpdf2 を利用
 
 # ─── ログ設定 ─────────────────────────────────────
 logging.basicConfig(level=logging.DEBUG)
@@ -29,7 +29,7 @@ with tempfile.NamedTemporaryFile(delete=False, suffix=".json") as tmp:
 
 # ─── Flask 初期化 ───────────────────────────────────
 app = Flask(__name__, static_folder="static", template_folder="templates")
-app.config['VERSION'] = '20250731'
+app.config['VERSION'] = '20250801'
 CORS(app)
 limiter = Limiter(app, key_func=get_remote_address, default_limits=["10 per minute"])
 
@@ -65,51 +65,57 @@ def daily_report():
     text_report = "ログがありません"
     if files:
         content = open(files[-1], encoding="utf-8").read()
-        resp = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "以下の対話ログをもとに、本日の介護日報を日本語で短くまとめてください。"},
-                {"role": "user", "content": content}
-            ]
-        )
-        text_report = resp.choices[0].message.content.strip()
+        try:
+            resp = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "以下の対話ログをもとに、本日の介護日報を日本語で短くまとめてください。"},
+                    {"role": "user", "content": content}
+                ]
+            )
+            text_report = resp.choices[0].message.content.strip()
+        except Exception as e:
+            logging.error(f"要約失敗: {e}")
+            text_report = "要約に失敗しました"
+
     all_media = os.listdir(UPLOAD_DIR)
     images = [f for f in all_media if f.startswith("image_")]
     videos = [f for f in all_media if f.startswith("video_")]
     return render_template("daily_report.html", now=now, text_report=text_report, images=images, videos=videos)
 
-# ─── 追加: サーバーでPDF生成 ─────────────────────────
+# ─── 3. サーバーでPDF生成 ─────────────────────────
 @app.route("/generate_pdf", methods=["GET"])
 def generate_pdf():
     now = (datetime.utcnow() + timedelta(hours=9)).strftime("%Y-%m-%d %H:%M")
 
-    # 最新ログを要約
     files = sorted(glob.glob(os.path.join(LOG_DIR, "log_*.txt")))
     text_report = "ログがありません"
     if files:
         content = open(files[-1], encoding="utf-8").read()
-        resp = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "以下の対話ログをもとに、本日の介護日報を日本語で短くまとめてください。"},
-                {"role": "user", "content": content}
-            ]
-        )
-        text_report = resp.choices[0].message.content.strip()
+        try:
+            resp = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "以下の対話ログをもとに、本日の介護日報を日本語で短くまとめてください。"},
+                    {"role": "user", "content": content}
+                ]
+            )
+            text_report = resp.choices[0].message.content.strip()
+        except Exception as e:
+            logging.error(f"要約失敗: {e}")
+            text_report = "要約に失敗しました"
 
-    # PDF作成
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", size=14)
     pdf.cell(200, 10, "本日の見守りレポート", ln=True, align="C")
     pdf.set_font("Arial", size=10)
     pdf.cell(200, 10, f"作成日時: {now}", ln=True, align="C")
-
     pdf.set_font("Arial", size=12)
     pdf.multi_cell(0, 10, f"会話日報:\n{text_report}")
     pdf.ln(10)
 
-    # 最新1枚の写真を追加（JPEG想定、幅70mm）
+    # 最新1枚の写真を追加（カラーJPEG、幅70mm）
     all_media = os.listdir(UPLOAD_DIR)
     images = [f for f in all_media if f.startswith("image_")]
     if images:
@@ -119,19 +125,18 @@ def generate_pdf():
         except Exception as e:
             logging.error(f"画像挿入エラー: {e}")
 
-    # 出力
     pdf_bytes = pdf.output(dest="S").encode("latin1")
     return (pdf_bytes, 200, {
         "Content-Type": "application/pdf",
         "Content-Disposition": "attachment; filename=daily_report.pdf"
     })
 
-# ─── 3. カメラテスト ────────────────────────────────
+# ─── 4. カメラテスト ────────────────────────────────
 @app.route("/camera-test/", methods=["GET"])
 def camera_test():
     return render_template("camera_test.html")
 
-# ─── 4. メディアアップロード ─────────────────────────
+# ─── 5. メディアアップロード ─────────────────────────
 @app.route("/upload_media", methods=["POST"])
 def upload_media():
     media_type = request.form.get("media_type")
@@ -139,7 +144,7 @@ def upload_media():
     if not media_type or not file:
         return jsonify({"error": "media_type or file missing"}), 400
 
-    # ── 古い動画は削除（動画アップロード時のみ）──
+    # 古い動画は削除（動画は常に最新1件だけ保持）
     if media_type == "video":
         for f in os.listdir(UPLOAD_DIR):
             if f.startswith("video_"):
@@ -147,10 +152,10 @@ def upload_media():
                     os.remove(os.path.join(UPLOAD_DIR, f))
                     logging.info(f"古い動画削除: {f}")
                 except Exception as e:
-                    logging.error(f"古い動画削除エラー: {e}")
+                    logging.warning(f"古い動画削除失敗: {f}, {e}")
 
-    # ── 保存処理 ──
-    orig_name = file.filename
+    # 保存処理
+    orig_name = file.filename or ""
     _, ext = os.path.splitext(orig_name)
     if not ext:
         ext = ".webm" if media_type == "video" else ".jpg"  # 写真はJPEG想定
@@ -162,4 +167,11 @@ def upload_media():
         file.save(path)
         return jsonify({"status": "saved", "filename": filename}), 200
     except Exception as e:
+        logging.error(f"保存エラー: {e}")
         return jsonify({"error": str(e)}), 500
+
+# ─── その他のルート（/chat, /logs, /create_invoice など）は現行通り ──
+# 必要に応じて追記してください
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
