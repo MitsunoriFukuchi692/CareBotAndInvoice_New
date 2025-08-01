@@ -1,91 +1,36 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>カメラ実験ページ</title>
-  <style>
-    body {
-      font-family: sans-serif;
-      text-align: center;
-      padding: 1rem;
-    }
-    h1 {
-      margin-bottom: 1rem;
-    }
-    video, canvas, img {
-      display: block;
-      max-width: 100%;
-      height: auto;
-      object-fit: contain;
-      margin: 0.5rem auto;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-    }
-    button {
-      display: inline-block;
-      margin: 0.5rem;
-      padding: 0.5rem 1rem;
-      font-size: 1rem;
-      border: none;
-      border-radius: 4px;
-      background: #007bff;
-      color: white;
-    }
-    button:hover {
-      background: #0056b3;
-      cursor: pointer;
-    }
-  </style>
-</head>
-<body>
-  <h1>カメラ実験ページ</h1>
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  const video = document.getElementById("camera");
+  const captureBtn = document.getElementById("captureBtn");
+  const canvas = document.getElementById("canvas");
+  const photo = document.getElementById("photo");
 
-  <!-- ビデオプレビュー -->
-  <video id="preview" autoplay playsinline></video>
+  // カメラ起動
+  navigator.mediaDevices.getUserMedia({ video: true })
+    .then(stream => {
+      video.srcObject = stream;
+    })
+    .catch(err => {
+      alert("カメラにアクセスできません: " + err);
+    });
 
-  <!-- カメラ切替ボタン -->
-  <div>
-    <button id="front-btn">前面カメラ</button>
-    <button id="back-btn">背面カメラ</button>
-  </div>
+  // 写真撮影
+  captureBtn.addEventListener("click", () => {
+    console.log("📸 ボタン押されました");
 
-  <!-- 録画コントロール -->
-  <button id="record-video-btn">8秒間 動画撮影</button>
-  <video id="recorded-video" controls></video>
+    const context = canvas.getContext("2d");
+    const width = video.videoWidth || 640;
+    const height = video.videoHeight || 480;
 
-  <!-- 静止画コントロール -->
-  <button id="take-photo-btn">写真を撮る</button>
-  <canvas id="photo-canvas" width="320" height="240"></canvas>
+    canvas.width = width;
+    canvas.height = height;
 
-  <!-- アップロードボタン -->
-  <button id="upload-btn">保存＆アップロード</button>
+    context.drawImage(video, 0, 0, width, height);
 
-  <script>
-    const video = document.getElementById("preview");
-    let currentStream = null;
+    const dataUrl = canvas.toDataURL("image/png");
+    photo.src = dataUrl;
 
-    async function startCamera(mode) {
-      if (currentStream) {
-        currentStream.getTracks().forEach(track => track.stop());
-      }
-      const constraints = { video: { facingMode: mode } };
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia(constraints);
-        currentStream = stream;
-        video.srcObject = stream;
-      } catch (err) {
-        console.error("カメラ起動エラー:", err);
-      }
-    }
-
-    document.getElementById("front-btn").onclick = () => startCamera("user");
-    document.getElementById("back-btn").onclick = () => startCamera("environment");
-
-    // ページ読み込み時は背面カメラ優先で起動
-    startCamera("environment");
-  </script>
-
-  <script src="{{ url_for('static', filename='js/camera.js') }}"></script>
-</body>
-</html>
+    console.log("✅ 写真を生成しました:", dataUrl.substring(0,50));
+  });
+});
+</script>
