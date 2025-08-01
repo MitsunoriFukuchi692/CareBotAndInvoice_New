@@ -5,22 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>本日の見守りレポート</title>
   <style>
-    body {
-      font-family: sans-serif;
-      padding: 1rem;
-    }
-    h1 {
-      text-align: center;
-      margin-bottom: 0.5rem;
-    }
-    .timestamp {
-      text-align: center;
-      color: #666;
-      margin-bottom: 1.5rem;
-    }
-    section {
-      margin-bottom: 2rem;
-    }
+    body { font-family: sans-serif; padding: 1rem; }
+    h1 { text-align: center; margin-bottom: 0.5rem; }
+    .timestamp { text-align: center; color: #666; margin-bottom: 1.5rem; }
+    section { margin-bottom: 2rem; }
     img, video {
       display: block;
       max-width: 100%;
@@ -36,10 +24,7 @@
       border-radius: 4px;
       overflow-x: auto;
     }
-    h2 {
-      border-bottom: 1px solid #ddd;
-      padding-bottom: 0.5rem;
-    }
+    h2 { border-bottom: 1px solid #ddd; padding-bottom: 0.5rem; }
     #pdf-btn {
       display: block;
       margin: 1rem auto;
@@ -50,10 +35,7 @@
       background: #007bff;
       color: white;
     }
-    #pdf-btn:hover {
-      background: #0056b3;
-      cursor: pointer;
-    }
+    #pdf-btn:hover { background: #0056b3; cursor: pointer; }
   </style>
 </head>
 <body>
@@ -95,7 +77,7 @@
 
   <script>
     document.getElementById("pdf-btn").addEventListener("click", () => {
-      window.print();  // ブラウザの印刷ダイアログ → PDF保存可能
+      window.print();
     });
   </script>
 </body>

@@ -5,13 +5,33 @@
   const photoBtn       = document.getElementById("take-photo-btn");
   const canvas         = document.getElementById("photo-canvas");
   const uploadBtn      = document.getElementById("upload-btn");
+  const frontBtn       = document.getElementById("front-btn");
+  const backBtn        = document.getElementById("back-btn");
 
-  const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-  preview.srcObject = stream;
-
+  let stream = null;
   let recordedBlob = null;
   let photoBlob    = null;
   let recordMime   = "video/webm";
+
+  // カメラ開始関数
+  async function startCamera(facingMode = "user") {
+    if (stream) {
+      // すでにカメラが動いていたら停止
+      stream.getTracks().forEach(track => track.stop());
+    }
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: facingMode },
+      audio: true
+    });
+    preview.srcObject = stream;
+  }
+
+  // 初期は前面カメラ
+  await startCamera("user");
+
+  // 切替ボタン
+  frontBtn.onclick = () => startCamera("user");
+  backBtn.onclick  = () => startCamera({ exact: "environment" });
 
   // 動画録画
   recordBtn.onclick = () => {
@@ -32,13 +52,12 @@
     setTimeout(() => recorder.stop(), 8000);
   };
 
-  // 静止画取得（スマホ対応版）
+  // 静止画取得（スマホ対応）
   photoBtn.onclick = () => {
     const ctx = canvas.getContext("2d");
     canvas.width = preview.videoWidth || 640;
     canvas.height = preview.videoHeight || 480;
     ctx.drawImage(preview, 0, 0, canvas.width, canvas.height);
-
     canvas.toBlob(b => { photoBlob = b; console.log("📸 写真撮影OK"); }, "image/png");
   };
 
