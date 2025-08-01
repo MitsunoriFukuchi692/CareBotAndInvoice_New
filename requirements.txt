@@ -9,4 +9,4 @@ google-cloud-texttospeech==2.15.1
 supabase
 gTTS
 stripe
-fpdf==1.7.2
+fpdf2
