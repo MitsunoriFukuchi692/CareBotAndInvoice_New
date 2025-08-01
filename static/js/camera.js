@@ -34,8 +34,12 @@
   await startCamera("user");
 
   // 切替ボタン
+  if (frontBtn) {
   frontBtn.onclick = () => startCamera("user");
-  backBtn.onclick  = () => startCamera("environment");  // exactを外した
+}
+if (backBtn) {
+  backBtn.onclick  = () => startCamera("environment");
+}
 
   // 動画録画
   recordBtn.onclick = () => {
@@ -58,12 +62,16 @@
 
   // 静止画撮影
   photoBtn.onclick = () => {
-    const ctx = canvas.getContext("2d");
-    canvas.width = preview.videoWidth || 640;
-    canvas.height = preview.videoHeight || 480;
-    ctx.drawImage(preview, 0, 0, canvas.width, canvas.height);
-    canvas.toBlob(b => { photoBlob = b; console.log("📸 写真撮影OK"); }, "image/png");
-  };
+  const ctx = canvas.getContext("2d");
+  canvas.width = preview.videoWidth || 640;
+  canvas.height = preview.videoHeight || 480;
+  ctx.drawImage(preview, 0, 0, canvas.width, canvas.height);
+
+  canvas.toBlob(b => { 
+    photoBlob = b; 
+    console.log("📸 写真撮影OK（最新1枚）");
+  }, "image/png", 1.0);  // 高品質カラー
+};
 
   // 保存＆アップロード
   uploadBtn.onclick = async () => {
