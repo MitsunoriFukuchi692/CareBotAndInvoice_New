@@ -138,24 +138,28 @@ def upload_media():
     file = request.files.get("file")
     if not media_type or not file:
         return jsonify({"error": "media_type or file missing"}), 400
+
+    # ── 古い動画は削除（動画アップロード時のみ）──
+    if media_type == "video":
+        for f in os.listdir(UPLOAD_DIR):
+            if f.startswith("video_"):
+                try:
+                    os.remove(os.path.join(UPLOAD_DIR, f))
+                    logging.info(f"古い動画削除: {f}")
+                except Exception as e:
+                    logging.error(f"古い動画削除エラー: {e}")
+
+    # ── 保存処理 ──
     orig_name = file.filename
     _, ext = os.path.splitext(orig_name)
     if not ext:
-        ext = ".webm" if media_type == "video" else ".png"
+        ext = ".webm" if media_type == "video" else ".jpg"  # 写真はJPEG想定
     ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
     filename = f"{media_type}_{ts}{ext}"
     path = os.path.join(UPLOAD_DIR, filename)
+
     try:
         file.save(path)
         return jsonify({"status": "saved", "filename": filename}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
-@app.route("/uploads/<path:filename>", methods=["GET"])
-def serve_upload(filename):
-    return send_from_directory(UPLOAD_DIR, filename)
-
-# （以下、既存の /ja/templates, /ja/chat, /ja/explain, /ja/translate, /ja/save_log, /chat, /logs, /create_invoice は省略せず現行通り残す）
-# ...
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
