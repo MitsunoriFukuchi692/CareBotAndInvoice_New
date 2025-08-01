@@ -170,8 +170,28 @@ def upload_media():
         logging.error(f"保存エラー: {e}")
         return jsonify({"error": str(e)}), 500
 
-# ─── その他のルート（/chat, /logs, /create_invoice など）は現行通り ──
-# 必要に応じて追記してください
+# ─── 6. 用語説明 ───────────────────────────────
+@app.route("/ja/explain", methods=["POST"])
+def explain_term():
+    try:
+        data = request.get_json()
+        term = data.get("term", "")
+        if not term:
+            return jsonify({"error": "用語が空です"}), 400
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "入力された用語を30文字以内で簡単に日本語で説明してください。"},
+                {"role": "user", "content": term}
+            ],
+            max_tokens=50
+        )
+        explanation = response.choices[0].message.content.strip()
+        return jsonify({"explanation": explanation})
+
+    except Exception as e:
+        logging.error(f"用語説明エラー: {e}")
+        return jsonify({"error": "用語説明に失敗しました"}), 500
+
+# ─── メイン ────────
