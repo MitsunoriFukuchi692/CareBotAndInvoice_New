@@ -107,18 +107,19 @@ def generate_pdf():
 
     pdf.set_font("Arial", size=12)
     pdf.multi_cell(0, 10, f"会話日報:\n{text_report}")
+    pdf.ln(10)
 
-    # 最新1枚の写真を追加（幅70mmで配置）
+    # 最新1枚の写真を追加（JPEG想定、幅70mm）
     all_media = os.listdir(UPLOAD_DIR)
     images = [f for f in all_media if f.startswith("image_")]
     if images:
         latest_img = os.path.join(UPLOAD_DIR, sorted(images)[-1])
         try:
-            pdf.image(latest_img, x=10, y=70, w=70)  # 幅70mm
+            pdf.image(latest_img, x=10, y=pdf.get_y(), w=70)
         except Exception as e:
             logging.error(f"画像挿入エラー: {e}")
 
-    # PDFをバイト列で返す
+    # 出力
     pdf_bytes = pdf.output(dest="S").encode("latin1")
     return (pdf_bytes, 200, {
         "Content-Type": "application/pdf",
