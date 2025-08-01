@@ -14,21 +14,22 @@
   let recordMime   = "video/webm";
 
   // カメラ開始（facingModeに非対応でも落ちないようにする）
-  async function startCamera(facing = "user") {
-    try {
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-      }
-      stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: facing },
-        audio: true
-      });
-      preview.srcObject = stream;
-    } catch (err) {
-      console.error("カメラ起動エラー:", err);
-      alert("カメラ切替に失敗しました");
+  // カメラ開始（マイクOFFに変更）
+async function startCamera(facing = "user") {
+  try {
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop());
     }
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: facing },
+      audio: false   // ← ここを true → false に修正
+    });
+    preview.srcObject = stream;
+  } catch (err) {
+    console.error("カメラ起動エラー:", err);
+    alert("カメラ切替に失敗しました");
   }
+}
 
   // 初期は前面カメラ
   await startCamera("user");
