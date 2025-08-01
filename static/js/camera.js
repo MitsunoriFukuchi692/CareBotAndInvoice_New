@@ -13,17 +13,21 @@
   let photoBlob    = null;
   let recordMime   = "video/webm";
 
-  // カメラ開始関数
-  async function startCamera(facingMode = "user") {
-    if (stream) {
-      // すでにカメラが動いていたら停止
-      stream.getTracks().forEach(track => track.stop());
+  // カメラ開始（facingModeに非対応でも落ちないようにする）
+  async function startCamera(facing = "user") {
+    try {
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: facing },
+        audio: true
+      });
+      preview.srcObject = stream;
+    } catch (err) {
+      console.error("カメラ起動エラー:", err);
+      alert("カメラ切替に失敗しました");
     }
-    stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: facingMode },
-      audio: true
-    });
-    preview.srcObject = stream;
   }
 
   // 初期は前面カメラ
@@ -31,7 +35,7 @@
 
   // 切替ボタン
   frontBtn.onclick = () => startCamera("user");
-  backBtn.onclick  = () => startCamera({ exact: "environment" });
+  backBtn.onclick  = () => startCamera("environment");  // exactを外した
 
   // 動画録画
   recordBtn.onclick = () => {
@@ -52,7 +56,7 @@
     setTimeout(() => recorder.stop(), 8000);
   };
 
-  // 静止画取得（スマホ対応）
+  // 静止画撮影
   photoBtn.onclick = () => {
     const ctx = canvas.getContext("2d");
     canvas.width = preview.videoWidth || 640;
@@ -73,18 +77,4 @@
       uploaded = true;
     }
     if (recordedBlob) {
-      const ext = recordMime === "video/mp4" ? "mp4" : "webm";
-      const formVid = new FormData();
-      formVid.append("media_type", "video");
-      formVid.append("file", recordedBlob, `movie.${ext}`);
-      await fetch("/upload_media", { method: "POST", body: formVid });
-      uploaded = true;
-    }
-
-    if (uploaded) {
-      window.location.href = "/daily_report";
-    } else {
-      alert("保存する写真または動画がありません。");
-    }
-  };
-})();
+      const ext = record
