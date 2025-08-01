@@ -77,4 +77,18 @@
       uploaded = true;
     }
     if (recordedBlob) {
-      const ext = record
+      const ext = recordMime === "video/mp4" ? "mp4" : "webm";
+      const formVid = new FormData();
+      formVid.append("media_type", "video");
+      formVid.append("file", recordedBlob, `movie.${ext}`);
+      await fetch("/upload_media", { method: "POST", body: formVid });
+      uploaded = true;
+    }
+
+    if (uploaded) {
+      window.location.href = "/daily_report";
+    } else {
+      alert("保存する写真または動画がありません。");
+    }
+  };
+})();
