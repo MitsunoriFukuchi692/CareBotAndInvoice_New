@@ -200,15 +200,26 @@ def translate_text():
     try:
         data = request.get_json()
         text = data.get("text", "")
-        direction = data.get("direction", "ja-en")  # ja-en or en-ja
+        direction = data.get("direction", "ja-en")  # ja-en / en-ja / ja-vi / vi-ja / ja-tl / tl-ja
 
         if not text:
             return jsonify({"error": "翻訳するテキストがありません"}), 400
 
+        # 翻訳方向ごとにプロンプトを切替
         if direction == "ja-en":
             system_prompt = "次の日本語を英語に翻訳してください。"
-        else:
+        elif direction == "en-ja":
             system_prompt = "次の英語を日本語に翻訳してください。"
+        elif direction == "ja-vi":
+            system_prompt = "次の日本語をベトナム語に翻訳してください。"
+        elif direction == "vi-ja":
+            system_prompt = "次のベトナム語を日本語に翻訳してください。"
+        elif direction == "ja-tl":
+            system_prompt = "次の日本語をタガログ語に翻訳してください。"
+        elif direction == "tl-ja":
+            system_prompt = "次のタガログ語を日本語に翻訳してください。"
+        else:
+            return jsonify({"error": f"未対応の翻訳方向: {direction}"}), 400
 
         response = client.chat.completions.create(
             model="gpt-4o-mini",
@@ -216,7 +227,7 @@ def translate_text():
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": text}
             ],
-            max_tokens=100
+            max_tokens=150
         )
         translated = response.choices[0].message.content.strip()
         return jsonify({"translated": translated})
