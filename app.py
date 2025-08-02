@@ -225,5 +225,28 @@ def translate_text():
         logging.error(f"翻訳エラー: {e}")
         return jsonify({"error": "翻訳に失敗しました"}), 500
 
+# ─── 会話ログ保存 ───────────────────────────────
+@app.route("/ja/save_log", methods=["POST"])
+def save_log():
+    try:
+        data = request.get_json()
+        log_text = data.get("log", "").strip()
+        if not log_text:
+            return jsonify({"error": "ログが空です"}), 400
+
+        # ファイル名（日時付き）
+        ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        filename = os.path.join(LOG_DIR, f"log_{ts}.txt")
+
+        with open(filename, "w", encoding="utf-8") as f:
+            f.write(log_text)
+
+        logging.info(f"会話ログ保存: {filename}")
+        return jsonify({"status": "success", "filename": filename})
+
+    except Exception as e:
+        logging.error(f"会話ログ保存エラー: {e}")
+        return jsonify({"error": "会話ログ保存に失敗しました"}), 500
+
 
 # ─── メイン ────────
