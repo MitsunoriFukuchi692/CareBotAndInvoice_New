@@ -1,0 +1,194 @@
+/* === 全体 === */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; font-family: "Noto Sans JP", sans-serif; background-color: #f5f5f5; }
+
+/* === ヘッダー === */
+#chat-header {
+  background-color: #007bff;
+  color: #fff;
+  text-align: center;
+  padding: 12px 0;
+  font-size: 1.5rem;
+}
+
+/* === チャットウィンドウ === */
+#chat-window {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  background-color: #fff;
+  margin: 8px;
+  border-radius: 8px;
+  border: 1px solid #ddd;
+  max-height: 40vh;
+}
+
+/* === メッセージ色分け === */
+.message {
+  margin-bottom: 8px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  line-height: 1.4;
+}
+.message.caregiver {
+  background-color: #e0f7fa !important;
+  color: #006064 !important;
+  text-align: left !important;
+}
+.message.caree {
+  background-color: #fff3e0 !important;
+  color: #e65100 !important;
+  text-align: right !important;
+}
+
+/* === 入力パネル === */
+.input-panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  padding: 8px;
+  background-color: #fff;
+  border-top: 1px solid #ddd;
+}
+.role-label.caregiver {
+  color: #007bff;
+  font-weight: bold;
+  margin-right: 8px;
+}
+.role-label.caree {
+  color: #28a745;
+  font-weight: bold;
+  margin-right: 8px;
+}
+.input-panel input {
+  flex: 1;
+  min-width: 120px;
+  padding: 8px;
+  font-size: 1rem;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  margin: 4px 8px 4px 0;
+}
+.input-panel button {
+  width: 40px;
+  height: 40px;
+  font-size: 20px;
+  background-color: #007bff;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  margin: 4px 8px 4px 0;
+}
+.input-panel button:hover {
+  background-color: #0056b3;
+}
+
+/* === テンプレート関連 === */
+#template-container {
+  text-align: center;
+  margin: 1rem 0;
+}
+.template-start {
+  display: block;
+  width: 100%;
+  padding: 10px;
+  margin: 0.5rem auto;
+  background-color: #28a745;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.template-start:hover {
+  background-color: #218838;
+}
+#template-container button {
+  display: inline-block;
+  font-size: 1em;
+  padding: 8px 16px;
+  margin: 5px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+}
+
+/* === 用語説明・翻訳・ログ保存 === */
+.tts-panel, #glossary, #translation-panel, .action-buttons {
+  display: flex;
+  align-items: center;
+  padding: 8px;
+  background-color: #fff;
+  border-top: 1px solid #ddd;
+  gap: 8px;
+}
+#glossary input, #translation-panel select {
+  padding: 6px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+#glossary button, #translation-panel button, .action-buttons button {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+/* === レスポンシブ対応 === */
+@media only screen and (max-width: 600px) {
+  #chat-header { font-size: 1.25rem; padding: 10px 0; }
+  #chat-window { margin: 4px; padding: 8px; max-height: 30vh; }
+  .input-panel, .tts-panel, #glossary, #translation-panel, .action-buttons {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+  }
+  .input-panel input, .input-panel button, .template-start {
+    width: 100%;
+    margin: 4px 0;
+  }
+}
+
+.message {
+  background-color: yellow !important;
+}
+
+.message.caregiver {
+  background-color: lightblue !important;
+}
+
+.message.caree {
+  background-color: orange !important;
+}
+
+/* === テンプレート開始ボタンの強調 === */
+#template-start-btn {
+  background-color: #28a745;   /* 鮮やかな緑 */
+  color: white;
+  font-size: 1.5rem;           /* 大きめ文字 */
+  font-weight: bold;
+  padding: 1rem 2rem;          /* 余白を広めに */
+  border: none;
+  border-radius: 10px;         /* 角丸 */
+  cursor: pointer;
+  display: block;
+  margin: 1rem auto;           /* 中央寄せ */
+  width: 60%;                  /* PC時は6割幅 */
+  text-align: center;
+  transition: background-color 0.3s ease, transform 0.2s ease;
+}
+
+#template-start-btn:hover {
+  background-color: #218838;   /* 濃い緑で hover */
+  transform: scale(1.05);      /* 少し大きくなる */
+}
+
+/* === スマホ対応 === */
+@media (max-width: 768px) {
+  #template-start-btn {
+    width: 90%;         /* スマホでは横幅いっぱいに近く */
+    font-size: 1.2rem;  /* 少し小さめ文字で調整 */
+    padding: 0.8rem 1rem;
+  }
+}
+
