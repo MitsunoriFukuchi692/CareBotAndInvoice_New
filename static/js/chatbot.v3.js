@@ -16,6 +16,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const templateContainer = document.getElementById("template-buttons");
   const caregiverMic = document.getElementById("mic-caregiver");
   const careeMic = document.getElementById("mic-caree");
+  const subOptionsContainer = document.getElementById("subOptionsContainer");
 
   // 会話の役割（最初は介護士から）
   let currentRole = "caregiver";
@@ -163,7 +164,6 @@ document.addEventListener("DOMContentLoaded", () => {
           const audioBlob = await ttsRes.blob();
           const audioUrl = URL.createObjectURL(audioBlob);
 
-          // <audio>タグを作成して再生（iOS Safari対応）
           const audio = document.createElement("audio");
           audio.src = audioUrl;
           audio.autoplay = true;
@@ -181,9 +181,36 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  // === サブ選択肢（対話候補） ===
+  function renderSubOptions(category) {
+    if (!subOptionsContainer) return;
+    subOptionsContainer.innerHTML = "";
+
+    const optionsMap = {
+      "体調": ["元気です", "少し調子が悪い", "休みたい"],
+      "薬": ["薬を飲みました", "まだ飲んでいません", "薬が切れました"],
+      "排便": ["問題ありません", "便秘気味です", "下痢があります"],
+      "睡眠": ["よく眠れました", "眠れなかった", "昼寝しました"],
+      "食事": ["全部食べました", "少し残しました", "食欲がありません"]
+    };
+
+    const options = optionsMap[category] || [];
+    options.forEach(opt => {
+      const btn = document.createElement("button");
+      btn.textContent = opt;
+      btn.classList.add("sub-btn");
+      btn.addEventListener("click", () => {
+        appendMessage(currentRole, opt);
+        currentRole = (currentRole === "caregiver") ? "caree" : "caregiver";
+        subOptionsContainer.innerHTML = ""; // 押したら消す
+      });
+      subOptionsContainer.appendChild(btn);
+    });
+  }
+
   // === テンプレート表示（交互に介護士→被介護者） ===
   function showTemplates() {
-    templateContainer.innerHTML = ""; // 一旦クリア
+    templateContainer.innerHTML = "";
 
     const categories = ["体調", "薬", "排便", "睡眠", "食事"];
     categories.forEach(cat => {
@@ -194,11 +221,12 @@ document.addEventListener("DOMContentLoaded", () => {
       btn.addEventListener("click", () => {
         if (currentRole === "caregiver") {
           appendMessage("caregiver", `${cat}についてどうですか？`);
-          currentRole = "caree"; // 次は被介護者
+          currentRole = "caree";
         } else {
           appendMessage("caree", `はい、${cat}は大丈夫です。`);
-          currentRole = "caregiver"; // 次は介護士
+          currentRole = "caregiver";
         }
+        renderSubOptions(cat); // サブ選択肢を表示
       });
 
       templateContainer.appendChild(btn);
@@ -208,8 +236,8 @@ document.addEventListener("DOMContentLoaded", () => {
   // === テンプレート開始ボタン ===
   if (templateStartBtn) {
     templateStartBtn.addEventListener("click", () => {
-      templateStartBtn.style.display = "none"; // ボタンを消す
-      showTemplates(); // カテゴリーボタンを表示
+      templateStartBtn.style.display = "none";
+      showTemplates();
     });
   }
 });
