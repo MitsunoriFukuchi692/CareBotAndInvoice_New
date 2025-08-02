@@ -199,3 +199,36 @@ html, body {
   color: #007bff;
   margin: 1rem 0;
 }
+
+/* === テンプレート開始ボタンの強調 === */
+#template-start-btn {
+  background-color: #28a745;   /* 鮮やかな緑 */
+  color: white;
+  font-size: 1.5rem;           /* 大きめ文字 */
+  font-weight: bold;
+  padding: 1rem 2rem;          /* 余白を広めに */
+  border: none;
+  border-radius: 10px;         /* 角丸 */
+  cursor: pointer;
+  display: block;
+  margin: 1rem auto;           /* 中央寄せ */
+  width: 60%;                  /* PC時は6割幅 */
+  text-align: center;
+  transition: background-color 0.3s ease, transform 0.2s ease;
+}
+
+#template-start-btn:hover {
+  background-color: #218838;   /* 濃い緑で hover */
+  transform: scale(1.05);      /* 少し大きくなる */
+}
+
+/* === スマホ対応 === */
+@media (max-width: 768px) {
+  #template-start-btn {
+    width: 90%;         /* スマホでは横幅いっぱいに近く */
+    font-size: 1.2rem;  /* 少し小さめ文字で調整 */
+    padding: 0.8rem 1rem;
+  }
+}
+
+
