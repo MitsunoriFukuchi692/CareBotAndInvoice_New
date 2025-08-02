@@ -188,28 +188,41 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // === 翻訳 ===
-  if (translateBtn) {
-    translateBtn.addEventListener("click", async () => {
-      const text = document.getElementById("explanation").textContent.trim();
-      if (!text) {
-        alert("先に用語説明を入れてください");
-        return;
-      }
-      try {
-        const res = await fetch("/ja/translate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text, direction: "ja-en" })
-        });
-        const data = await res.json();
-        document.getElementById("translation-result").textContent = data.translated;
-        speak(data.translated, "translation"); // 🔊 英語を米国発音で読み上げ
-      } catch (err) {
-        alert("翻訳に失敗しました");
-        console.error(err);
-      }
-    });
-  }
+if (translateBtn) {
+  translateBtn.addEventListener("click", async () => {
+    const text = document.getElementById("explanation").textContent.trim();
+    if (!text) {
+      alert("先に用語説明を入れてください");
+      return;
+    }
+    try {
+      const direction = document.getElementById("translate-direction").value;
+      const res = await fetch("/ja/translate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, direction })
+      });
+      const data = await res.json();
+      document.getElementById("translation-result").textContent = data.translated;
+
+      // 言語ごとの読み上げ設定
+      let lang = "en-US"; // デフォルト英語
+      if (direction.includes("ja")) lang = "ja-JP";
+      if (direction.includes("vi")) lang = "vi-VN";
+      if (direction.includes("tl")) lang = "fil-PH";
+
+      const utter = new SpeechSynthesisUtterance(data.translated);
+      utter.lang = lang;
+      utter.volume = 1.0;
+      utter.rate = 1.0;
+      window.speechSynthesis.speak(utter);
+
+    } catch (err) {
+      alert("翻訳に失敗しました");
+      console.error(err);
+    }
+  });
+}
 
   // === テンプレート開始 ===
   if (templateStartBtn) {
