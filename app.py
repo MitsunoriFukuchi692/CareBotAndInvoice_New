@@ -67,7 +67,7 @@ def daily_report():
         content = open(files[-1], encoding="utf-8").read()
         try:
             resp = client.chat.completions.create(
-                model="gpt-3.5-turbo",
+                model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": "以下の対話ログをもとに、本日の介護日報を日本語で短くまとめてください。"},
                     {"role": "user", "content": content}
@@ -94,7 +94,7 @@ def generate_pdf():
         content = open(files[-1], encoding="utf-8").read()
         try:
             resp = client.chat.completions.create(
-                model="gpt-3.5-turbo",
+                model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": "以下の対話ログをもとに、本日の介護日報を日本語で短くまとめてください。"},
                     {"role": "user", "content": content}
@@ -123,7 +123,7 @@ def generate_pdf():
         try:
             pdf.image(latest_img, x=10, y=pdf.get_y(), w=70)
         except Exception as e:
-            logging.error(f"画像挿入エラー: {e}")
+            logging.warning(f"画像挿入エラー: {e}")
 
     pdf_bytes = pdf.output(dest="S").encode("latin1")
     return (pdf_bytes, 200, {
@@ -248,5 +248,6 @@ def save_log():
         logging.error(f"会話ログ保存エラー: {e}")
         return jsonify({"error": "会話ログ保存に失敗しました"}), 500
 
-
-# ─── メイン ────────
+# ─── メイン ───────────────────────────────────────
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
