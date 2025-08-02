@@ -179,20 +179,33 @@ if (translateBtn) {
 }
 
   // === テンプレート表示関数 ===
-  function showTemplates(role) {
-    templateContainer.innerHTML = ""; // 一旦クリア
+ function showTemplates(role) {
+  templateContainer.innerHTML = ""; // 一旦クリア
 
-    const categories = ["体調", "薬", "排便", "睡眠", "食事"];
-    categories.forEach(cat => {
-      const btn = document.createElement("button");
-      btn.textContent = cat;
-      btn.classList.add("template-btn");
-      btn.addEventListener("click", () => {
-        appendMessage(role, `${cat}についてどうですか？`);
-      });
-      templateContainer.appendChild(btn);
+  const categories = ["体調", "薬", "排便", "睡眠", "食事"];
+  categories.forEach(cat => {
+    const btn = document.createElement("button");
+    btn.textContent = cat;
+    btn.classList.add("template-btn");
+
+    btn.addEventListener("click", () => {
+      if (role === "caregiver") {
+        appendMessage("caregiver", `${cat}についてどうですか？`);
+      } else {
+        appendMessage("caree", `はい、${cat}は大丈夫です。`);
+      }
     });
+
+    templateContainer.appendChild(btn);
+  });
+
+  // 交互に切り替え
+  if (role === "caregiver") {
+    nextRole = "caree";
+  } else {
+    nextRole = "caregiver";
   }
+}
 
   // === テンプレート開始ボタン ===
   if (templateStartBtn) {
