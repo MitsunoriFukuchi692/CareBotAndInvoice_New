@@ -189,15 +189,18 @@ if (translateBtn) {
     btn.classList.add("template-btn");
 
     btn.addEventListener("click", () => {
-      if (role === "caregiver") {
+      if (currentRole === "caregiver") {
         appendMessage("caregiver", `${cat}についてどうですか？`);
+        currentRole = "caree"; // 次は被介護者
       } else {
         appendMessage("caree", `はい、${cat}は大丈夫です。`);
+        currentRole = "caregiver"; // 次は介護士
       }
     });
 
     templateContainer.appendChild(btn);
   });
+}
 
   // 交互に切り替え
   if (role === "caregiver") {
