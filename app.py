@@ -268,6 +268,43 @@ def serve_upload(filename):
         logging.error(f"ファイル配信エラー: {e}")
         return "ファイルが見つかりません", 404
 
+# ─── Google TTS (翻訳結果読み上げ用) ───────────────────────────────
+@app.route("/tts", methods=["POST"])
+def tts():
+    try:
+        data = request.get_json()
+        text = data.get("text", "")
+        lang = data.get("lang", "en-US")
+
+        if not text:
+            return jsonify({"error": "text is empty"}), 400
+
+        client_tts = texttospeech.TextToSpeechClient()
+        synthesis_input = texttospeech.SynthesisInput(text=text)
+
+        voice = texttospeech.VoiceSelectionParams(
+            language_code=lang,
+            ssml_gender=texttospeech.SsmlVoiceGender.NEUTRAL,
+        )
+
+        audio_config = texttospeech.AudioConfig(
+            audio_encoding=texttospeech.AudioEncoding.MP3
+        )
+
+        response = client_tts.synthesize_speech(
+            input=synthesis_input, voice=voice, audio_config=audio_config
+        )
+
+        return (
+            response.audio_content,
+            200,
+            {"Content-Type": "audio/mpeg"}
+        )
+
+    except Exception as e:
+        logging.error(f"TTSエラー: {e}")
+        return jsonify({"error": "TTSに失敗しました"}), 500
+
 # ─── メイン ───────────────────────────────────────
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
