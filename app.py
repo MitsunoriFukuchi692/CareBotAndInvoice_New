@@ -248,6 +248,15 @@ def save_log():
         logging.error(f"会話ログ保存エラー: {e}")
         return jsonify({"error": "会話ログ保存に失敗しました"}), 500
 
+# ─── アップロード済みファイルを配信 ─────────────────────────
+@app.route("/uploads/<path:filename>")
+def serve_upload(filename):
+    try:
+        return send_from_directory(UPLOAD_DIR, filename)
+    except Exception as e:
+        logging.error(f"ファイル配信エラー: {e}")
+        return "ファイルが見つかりません", 404
+
 # ─── メイン ───────────────────────────────────────
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
