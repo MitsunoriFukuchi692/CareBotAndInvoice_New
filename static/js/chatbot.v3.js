@@ -127,53 +127,56 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // === 翻訳 + Google TTS 読み上げ ===
-  if (translateBtn) {
-    translateBtn.addEventListener("click", async () => {
-      const text = document.getElementById("explanation").textContent.trim();
-      if (!text) {
-        alert("先に用語説明を入れてください");
-        return;
+if (translateBtn) {
+  translateBtn.addEventListener("click", async () => {
+    const text = document.getElementById("explanation").textContent.trim();
+    if (!text) {
+      alert("先に用語説明を入れてください");
+      return;
+    }
+    try {
+      const direction = document.getElementById("translate-direction").value;
+      const res = await fetch("/ja/translate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, direction })
+      });
+      const data = await res.json();
+      document.getElementById("translation-result").textContent = data.translated;
+
+      // 言語コードを決定
+      let lang = "en-US";
+      if (direction.includes("ja")) lang = "ja-JP";
+      if (direction.includes("vi")) lang = "vi-VN";
+      if (direction.includes("tl")) lang = "fil-PH";
+
+      // Google TTS を呼び出して音声再生
+      const ttsRes = await fetch("/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: data.translated, lang })
+      });
+      if (ttsRes.ok) {
+        const audioBlob = await ttsRes.blob();
+        const audioUrl = URL.createObjectURL(audioBlob);
+
+        // <audio>タグを作成して再生（iOS Safari対策）
+        const audio = document.createElement("audio");
+        audio.src = audioUrl;
+        audio.autoplay = true;
+        document.body.appendChild(audio);
+        audio.onended = () => {
+          document.body.removeChild(audio);
+        };
+      } else {
+        console.error("TTS API error:", await ttsRes.text());
       }
-      try {
-        const direction = document.getElementById("translate-direction").value;
-        const res = await fetch("/ja/translate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text, direction })
-        });
-        const data = await res.json();
-        document.getElementById("translation-result").textContent = data.translated;
-
-        // 言語コードを決定
-        let lang = "en-US";
-        if (direction.includes("ja")) lang = "ja-JP";
-        if (direction.includes("vi")) lang = "vi-VN";
-        if (direction.includes("tl")) lang = "fil-PH";
-
-        // Google TTS を呼び出して音声再生
-        const ttsRes = await fetch("/tts", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text: data.translated, lang })
-        });
-        if (ttsRes.ok) {
-          const audioBlob = await ttsRes.blob();
-          const audioUrl = URL.createObjectURL(audioBlob);
-
-          // iOS Safari対応: <audio>を使って再生
-          const audio = new Audio(audioUrl);
-          audio.play().catch(err => {
-            console.error("音声再生エラー:", err);
-          });
-        } else {
-          console.error("TTS API error:", await ttsRes.text());
-        }
-      } catch (err) {
-        alert("翻訳に失敗しました");
-        console.error(err);
-      }
-    });
-  }
+    } catch (err) {
+      alert("翻訳に失敗しました");
+      console.error(err);
+    }
+  });
+}
 
   // === テンプレート表示関数 ===
   function showTemplates(role) {
