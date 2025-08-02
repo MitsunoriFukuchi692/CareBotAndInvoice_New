@@ -17,6 +17,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const caregiverMic = document.getElementById("mic-caregiver");
   const careeMic = document.getElementById("mic-caree");
 
+  // 会話の役割（最初は介護士から）
+  let currentRole = "caregiver";
+
   // === メッセージ表示 + 読み上げ（日本語会話用） ===
   function appendMessage(role, text) {
     const div = document.createElement("div");
@@ -127,94 +130,86 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // === 翻訳 + Google TTS 読み上げ ===
-if (translateBtn) {
-  translateBtn.addEventListener("click", async () => {
-    const text = document.getElementById("explanation").textContent.trim();
-    if (!text) {
-      alert("先に用語説明を入れてください");
-      return;
-    }
-    try {
-      const direction = document.getElementById("translate-direction").value;
-      const res = await fetch("/ja/translate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, direction })
-      });
-      const data = await res.json();
-      document.getElementById("translation-result").textContent = data.translated;
-
-      // 言語コードを決定
-      let lang = "en-US";
-      if (direction.includes("ja")) lang = "ja-JP";
-      if (direction.includes("vi")) lang = "vi-VN";
-      if (direction.includes("tl")) lang = "fil-PH";
-
-      // Google TTS を呼び出して音声再生
-      const ttsRes = await fetch("/tts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: data.translated, lang })
-      });
-      if (ttsRes.ok) {
-        const audioBlob = await ttsRes.blob();
-        const audioUrl = URL.createObjectURL(audioBlob);
-
-        // <audio>タグを作成して再生（iOS Safari対策）
-        const audio = document.createElement("audio");
-        audio.src = audioUrl;
-        audio.autoplay = true;
-        document.body.appendChild(audio);
-        audio.onended = () => {
-          document.body.removeChild(audio);
-        };
-      } else {
-        console.error("TTS API error:", await ttsRes.text());
+  if (translateBtn) {
+    translateBtn.addEventListener("click", async () => {
+      const text = document.getElementById("explanation").textContent.trim();
+      if (!text) {
+        alert("先に用語説明を入れてください");
+        return;
       }
-    } catch (err) {
-      alert("翻訳に失敗しました");
-      console.error(err);
-    }
-  });
-}
+      try {
+        const direction = document.getElementById("translate-direction").value;
+        const res = await fetch("/ja/translate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text, direction })
+        });
+        const data = await res.json();
+        document.getElementById("translation-result").textContent = data.translated;
 
-  // === テンプレート表示関数 ===
- function showTemplates(role) {
-  templateContainer.innerHTML = ""; // 一旦クリア
+        // 言語コードを決定
+        let lang = "en-US";
+        if (direction.includes("ja")) lang = "ja-JP";
+        if (direction.includes("vi")) lang = "vi-VN";
+        if (direction.includes("tl")) lang = "fil-PH";
 
-  const categories = ["体調", "薬", "排便", "睡眠", "食事"];
-  categories.forEach(cat => {
-    const btn = document.createElement("button");
-    btn.textContent = cat;
-    btn.classList.add("template-btn");
+        // Google TTS を呼び出して音声再生
+        const ttsRes = await fetch("/tts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: data.translated, lang })
+        });
+        if (ttsRes.ok) {
+          const audioBlob = await ttsRes.blob();
+          const audioUrl = URL.createObjectURL(audioBlob);
 
-    btn.addEventListener("click", () => {
-      if (currentRole === "caregiver") {
-        appendMessage("caregiver", `${cat}についてどうですか？`);
-        currentRole = "caree"; // 次は被介護者
-      } else {
-        appendMessage("caree", `はい、${cat}は大丈夫です。`);
-        currentRole = "caregiver"; // 次は介護士
+          // <audio>タグを作成して再生（iOS Safari対応）
+          const audio = document.createElement("audio");
+          audio.src = audioUrl;
+          audio.autoplay = true;
+          document.body.appendChild(audio);
+          audio.onended = () => {
+            document.body.removeChild(audio);
+          };
+        } else {
+          console.error("TTS API error:", await ttsRes.text());
+        }
+      } catch (err) {
+        alert("翻訳に失敗しました");
+        console.error(err);
       }
     });
-
-    templateContainer.appendChild(btn);
-  });
-}
-
-  // 交互に切り替え
-  if (role === "caregiver") {
-    nextRole = "caree";
-  } else {
-    nextRole = "caregiver";
   }
-}
+
+  // === テンプレート表示（交互に介護士→被介護者） ===
+  function showTemplates() {
+    templateContainer.innerHTML = ""; // 一旦クリア
+
+    const categories = ["体調", "薬", "排便", "睡眠", "食事"];
+    categories.forEach(cat => {
+      const btn = document.createElement("button");
+      btn.textContent = cat;
+      btn.classList.add("template-btn");
+
+      btn.addEventListener("click", () => {
+        if (currentRole === "caregiver") {
+          appendMessage("caregiver", `${cat}についてどうですか？`);
+          currentRole = "caree"; // 次は被介護者
+        } else {
+          appendMessage("caree", `はい、${cat}は大丈夫です。`);
+          currentRole = "caregiver"; // 次は介護士
+        }
+      });
+
+      templateContainer.appendChild(btn);
+    });
+  }
 
   // === テンプレート開始ボタン ===
   if (templateStartBtn) {
     templateStartBtn.addEventListener("click", () => {
-      templateStartBtn.style.display = "none";
-      showTemplates("caregiver");
+      templateStartBtn.style.display = "none"; // ボタンを消す
+      showTemplates(); // カテゴリーボタンを表示
     });
   }
 });
