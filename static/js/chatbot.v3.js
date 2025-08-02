@@ -159,8 +159,12 @@ document.addEventListener("DOMContentLoaded", () => {
         if (ttsRes.ok) {
           const audioBlob = await ttsRes.blob();
           const audioUrl = URL.createObjectURL(audioBlob);
+
+          // iOS Safari対応: <audio>を使って再生
           const audio = new Audio(audioUrl);
-          audio.play();
+          audio.play().catch(err => {
+            console.error("音声再生エラー:", err);
+          });
         } else {
           console.error("TTS API error:", await ttsRes.text());
         }
@@ -171,7 +175,23 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // === テンプレート開始 ===
+  // === テンプレート表示関数 ===
+  function showTemplates(role) {
+    templateContainer.innerHTML = ""; // 一旦クリア
+
+    const categories = ["体調", "薬", "排便", "睡眠", "食事"];
+    categories.forEach(cat => {
+      const btn = document.createElement("button");
+      btn.textContent = cat;
+      btn.classList.add("template-btn");
+      btn.addEventListener("click", () => {
+        appendMessage(role, `${cat}についてどうですか？`);
+      });
+      templateContainer.appendChild(btn);
+    });
+  }
+
+  // === テンプレート開始ボタン ===
   if (templateStartBtn) {
     templateStartBtn.addEventListener("click", () => {
       templateStartBtn.style.display = "none";
