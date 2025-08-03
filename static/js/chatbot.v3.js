@@ -71,69 +71,50 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // === 音声認識（押している間だけ録音） ===
+  // === 音声認識（Web Speech API 日本語用） ===
   function setupMic(button, input) {
-    if (!button) return;
+  if (!button) return;
 
-    let rec = null;
-
-    try {
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (!SpeechRecognition) {
-        console.warn("⚠️ このブラウザは音声認識に対応していません");
-        return;
-      }
-      rec = new SpeechRecognition();
-      rec.lang = "ja-JP";
-      rec.interimResults = false;
-      rec.maxAlternatives = 1;
-
-      rec.onresult = e => {
-        input.value = e.results[0][0].transcript;
-        console.log("✅ 音声認識結果:", input.value);
-      };
-
-      rec.onerror = e => {
-        console.error("⚠️ 音声認識エラー:", e.error);
-      };
-
-    } catch (err) {
-      console.error("⚠️ 音声認識初期化エラー:", err);
-      return;
-    }
-
-    // PC用: マウス押し/離し
-    button.addEventListener("mousedown", () => {
-      if (rec) {
-        rec.start();
-        console.log("🎤 録音開始 (mousedown)");
-      }
-    });
-    button.addEventListener("mouseup", () => {
-      if (rec) {
-        rec.stop();
-        console.log("🛑 録音停止 (mouseup)");
-      }
-    });
-
-    // スマホ用: タッチ押し/離し
-    button.addEventListener("touchstart", (e) => {
-      e.preventDefault(); // スクロール防止
-      if (rec) {
-        rec.start();
-        console.log("📱録音開始 (touchstart)");
-      }
-    });
-    button.addEventListener("touchend", (e) => {
-      e.preventDefault();
-      if (rec) {
-        rec.stop();
-        console.log("📱録音停止 (touchend)");
-      }
-    });
+  // Edge/Chrome対応
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    console.warn("このブラウザは音声認識に対応していません");
+    return;
   }
-  setupMic(caregiverMic, caregiverInput);
-  setupMic(careeMic, careeInput);
+
+  const rec = new SpeechRecognition();
+  rec.lang = "ja-JP";
+  rec.continuous = false;
+  rec.interimResults = false;
+
+  button.addEventListener("mousedown", () => {
+    try {
+      rec.start();
+      console.log("🎤 音声認識開始");
+    } catch (e) {
+      console.error("音声認識開始エラー:", e);
+    }
+  });
+
+  button.addEventListener("mouseup", () => {
+    try {
+      rec.stop();
+      console.log("🛑 音声認識停止");
+    } catch (e) {
+      console.error("音声認識停止エラー:", e);
+    }
+  });
+
+  rec.onresult = e => {
+    input.value = e.results[0][0].transcript;
+    console.log("✅ 認識結果:", input.value);
+  };
+
+  rec.onerror = e => {
+    console.error("音声認識エラー:", e.error);
+  };
+}
+
 
   // === 入力送信 ===
   if (caregiverSend) caregiverSend.addEventListener("click", () => {
@@ -290,4 +271,26 @@ document.addEventListener("DOMContentLoaded", () => {
       showTemplates();
     });
   }
+
+  // === スマホ判定してマイク制御 ===
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+  if (isMobile) {
+    // スマホではマイクボタンを隠す
+    if (caregiverMic) caregiverMic.style.display = "none";
+    if (careeMic) careeMic.style.display = "none";
+
+    // 案内メッセージを追加
+    const notice = document.createElement("div");
+    notice.textContent = "📱 スマホでは入力欄のマイク（キーボード機能）をご利用ください";
+    notice.style.color = "gray";
+    notice.style.fontSize = "0.9em";
+    chatWindow.appendChild(notice);
+
+  } else {
+    // PCではWeb Speech APIマイクを利用
+    setupMic(caregiverMic, caregiverInput);
+    setupMic(careeMic, careeInput);
+  }
+
 });
