@@ -72,32 +72,41 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // === 音声認識（Web Speech API 日本語用） ===
-  function setupMic(button, input) {
-    if (button) {
-      button.addEventListener("click", () => {
-        const rec = new webkitSpeechRecognition();
-        rec.lang = "ja-JP";
-        rec.onresult = e => input.value = e.results[0][0].transcript;
-        rec.start();
-      });
-    }
-  }
-  setupMic(caregiverMic, caregiverInput);
-  setupMic(careeMic, careeInput);
+function setupMic(button, input) {
+  if (!button) return;
 
-  // === 入力送信 ===
-  if (caregiverSend) caregiverSend.addEventListener("click", () => {
-    if (caregiverInput.value.trim()) {
-      appendMessage("caregiver", caregiverInput.value);
-      caregiverInput.value = "";
+  button.addEventListener("click", () => {
+    if (!("webkitSpeechRecognition" in window)) {
+      alert("このブラウザは音声認識に対応していません。");
+      return;
     }
+
+    const rec = new webkitSpeechRecognition();
+    rec.lang = "ja-JP";
+    rec.interimResults = false;
+    rec.maxAlternatives = 1;
+
+    rec.onresult = e => {
+      input.value = e.results[0][0].transcript;
+      console.log("🎤 音声認識結果:", input.value);
+    };
+
+    rec.onerror = e => {
+      console.error("❌ 音声認識エラー:", e);
+      alert("マイク入力でエラーが発生しました。");
+    };
+
+    rec.onend = () => {
+      console.log("🔚 音声認識終了");
+    };
+
+    rec.start();
+    console.log("🎤 音声認識開始");
   });
-  if (careeSend) careeSend.addEventListener("click", () => {
-    if (careeInput.value.trim()) {
-      appendMessage("caree", careeInput.value);
-      careeInput.value = "";
-    }
-  });
+}
+
+setupMic(caregiverMic, caregiverInput);
+setupMic(careeMic, careeInput);
 
   // === 用語説明 ===
   if (explainBtn) {
