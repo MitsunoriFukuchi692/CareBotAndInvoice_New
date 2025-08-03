@@ -71,55 +71,67 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // === 音声認識（Web Speech API 日本語用 / スマホ対応改良） ===
+  // === 音声認識（押している間だけ録音） ===
   function setupMic(button, input) {
     if (!button) return;
 
-    button.addEventListener("click", () => {
-      // Operaなど非対応ブラウザチェック
-      if (!("webkitSpeechRecognition" in window)) {
-        alert("このブラウザは音声認識に対応していません。Chrome または Edge をお試しください。");
+    let rec = null;
+
+    try {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        console.warn("⚠️ このブラウザは音声認識に対応していません");
         return;
       }
-
-      const rec = new webkitSpeechRecognition();
+      rec = new SpeechRecognition();
       rec.lang = "ja-JP";
-      rec.continuous = true;       // 🎯 連続認識モード
-      rec.interimResults = true;   // 🎯 途中経過も取る
-
-      // 🎵 開始合図のピッ音
-      try {
-        const beep = new Audio("data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEA...");
-        beep.play();
-      } catch (e) {
-        console.warn("効果音再生に失敗:", e);
-      }
+      rec.interimResults = false;
+      rec.maxAlternatives = 1;
 
       rec.onresult = e => {
-        let finalTranscript = "";
-        let interimTranscript = "";
-
-        for (let i = e.resultIndex; i < e.results.length; ++i) {
-          if (e.results[i].isFinal) {
-            finalTranscript += e.results[i][0].transcript;
-          } else {
-            interimTranscript += e.results[i][0].transcript;
-          }
-        }
-
-        // 入力欄に途中経過＋確定結果を反映
-        input.value = finalTranscript || interimTranscript;
+        input.value = e.results[0][0].transcript;
+        console.log("✅ 音声認識結果:", input.value);
       };
 
       rec.onerror = e => {
-        console.error("音声認識エラー:", e.error);
-        alert("音声認識に失敗しました。再度お試しください。");
+        console.error("⚠️ 音声認識エラー:", e.error);
       };
 
-      rec.start();
+    } catch (err) {
+      console.error("⚠️ 音声認識初期化エラー:", err);
+      return;
+    }
+
+    // PC用: マウス押し/離し
+    button.addEventListener("mousedown", () => {
+      if (rec) {
+        rec.start();
+        console.log("🎤 録音開始 (mousedown)");
+      }
+    });
+    button.addEventListener("mouseup", () => {
+      if (rec) {
+        rec.stop();
+        console.log("🛑 録音停止 (mouseup)");
+      }
+    });
+
+    // スマホ用: タッチ押し/離し
+    button.addEventListener("touchstart", (e) => {
+      e.preventDefault(); // スクロール防止
+      if (rec) {
+        rec.start();
+        console.log("📱録音開始 (touchstart)");
+      }
+    });
+    button.addEventListener("touchend", (e) => {
+      e.preventDefault();
+      if (rec) {
+        rec.stop();
+        console.log("📱録音停止 (touchend)");
+      }
     });
   }
-
   setupMic(caregiverMic, caregiverInput);
   setupMic(careeMic, careeInput);
 
