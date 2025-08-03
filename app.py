@@ -1,11 +1,9 @@
 import os, glob, logging, tempfile
-from io import BytesIO
 from datetime import datetime, timedelta
 
 from flask import (
     Flask, render_template, request,
-    jsonify, redirect, send_from_directory,
-    url_for
+    jsonify, send_from_directory
 )
 from flask_cors import CORS
 from flask_limiter import Limiter
@@ -15,7 +13,7 @@ import openai
 from openai import OpenAI
 import stripe
 from fpdf import FPDF   # fpdf2
-from PIL import Image   # ★ 追加：カラー変換と縮小用
+from PIL import Image   # 画像変換用
 
 # ─── ログ設定 ─────────────────────────────────────
 logging.basicConfig(level=logging.DEBUG)
@@ -30,7 +28,7 @@ with tempfile.NamedTemporaryFile(delete=False, suffix=".json") as tmp:
 
 # ─── Flask 初期化 ───────────────────────────────────
 app = Flask(__name__, static_folder="static", template_folder="templates")
-app.config['VERSION'] = '20250801'
+app.config['VERSION'] = '20250802'
 CORS(app)
 limiter = Limiter(app, key_func=get_remote_address, default_limits=["10 per minute"])
 
@@ -116,27 +114,29 @@ def generate_pdf():
     pdf.multi_cell(0, 10, f"会話日報:\n{text_report}")
     pdf.ln(10)
 
-    # 最新の写真をカラーで縮小して追加
+    # 最新写真をカラーに変換して挿入
     all_media = os.listdir(UPLOAD_DIR)
     images = [f for f in all_media if f.startswith("image_")]
     if images:
         latest_img = os.path.join(UPLOAD_DIR, sorted(images)[-1])
         try:
-            # PillowでRGB JPEGに変換して半分に縮小
             img = Image.open(latest_img).convert("RGB")
             w, h = img.size
-            img = img.resize((w // 2, h // 2))
-            tmp_img = latest_img.replace(".jpg", "_rgb.jpg")
-            img.save(tmp_img, "JPEG", quality=85)
+            # ページ幅190mmに収まるよう縮小
+            max_w = 190
+            scale = max_w / w
+            new_w, new_h = int(w * scale), int(h * scale)
+            img = img.resize((new_w, new_h))
+            tmp_img = latest_img.replace(".jpg", "_pdf.jpg")
+            img.save(tmp_img, "JPEG", quality=90, dpi=(150, 150))
 
-            # ページ幅に収まるように挿入
             y_before = pdf.get_y()
-            pdf.image(tmp_img, x=10, y=y_before, w=180)
+            pdf.image(tmp_img, x=10, y=y_before, w=max_w)
             pdf.ln(5)
         except Exception as e:
             logging.warning(f"画像挿入エラー: {e}")
 
-    # 動画はPDFに入れず、注記だけ追加
+    # 動画はPDFに入れず注記のみ
     videos = [f for f in all_media if f.startswith("video_")]
     if videos:
         pdf.set_font("Arial", size=12)
@@ -161,7 +161,7 @@ def upload_media():
     if not media_type or not file:
         return jsonify({"error": "media_type or file missing"}), 400
 
-    # 古い動画は削除（動画は常に最新1件だけ保持）
+    # 古い動画は削除（最新1件のみ保持）
     if media_type == "video":
         for f in os.listdir(UPLOAD_DIR):
             if f.startswith("video_"):
@@ -171,9 +171,7 @@ def upload_media():
                 except Exception as e:
                     logging.warning(f"古い動画削除失敗: {f}, {e}")
 
-    # 保存処理
-    orig_name = file.filename or ""
-    _, ext = os.path.splitext(orig_name)
+    _, ext = os.path.splitext(file.filename or "")
     if not ext:
         ext = ".webm" if media_type == "video" else ".jpg"
     ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
