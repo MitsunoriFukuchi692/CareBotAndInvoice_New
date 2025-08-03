@@ -73,62 +73,51 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // === 音声認識（Web Speech API 日本語用） ===
   function setupMic(button, input) {
-  if (!button) return;
+    if (!button) return;
 
-  // Edge/Chrome対応
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SpeechRecognition) {
-    console.warn("このブラウザは音声認識に対応していません");
-    return;
-  }
-
-  const rec = new SpeechRecognition();
-  rec.lang = "ja-JP";
-  rec.continuous = false;
-  rec.interimResults = false;
-
-  button.addEventListener("mousedown", () => {
-    try {
-      rec.start();
-      console.log("🎤 音声認識開始");
-    } catch (e) {
-      console.error("音声認識開始エラー:", e);
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      console.warn("このブラウザは音声認識に対応していません");
+      return;
     }
-  });
 
-  button.addEventListener("mouseup", () => {
-    try {
-      rec.stop();
-      console.log("🛑 音声認識停止");
-    } catch (e) {
-      console.error("音声認識停止エラー:", e);
-    }
-  });
+    const rec = new SpeechRecognition();
+    rec.lang = "ja-JP";
+    rec.continuous = false;
+    rec.interimResults = false;
 
-  rec.onresult = e => {
-    input.value = e.results[0][0].transcript;
-    console.log("✅ 認識結果:", input.value);
-  };
+    button.addEventListener("mousedown", () => {
+      try {
+        rec.start();
+        console.log("🎤 音声認識開始");
+      } catch (e) {
+        console.error("音声認識開始エラー:", e);
+      }
+    });
 
-  rec.onerror = e => {
-    console.error("音声認識エラー:", e.error);
-  };
-}
-rec.onresult = e => {
-  console.log("🎯 onresult 発火:", e);
-  let transcript = "";
-  for (let i = e.resultIndex; i < e.results.length; i++) {
-    transcript += e.results[i][0].transcript;
+    button.addEventListener("mouseup", () => {
+      try {
+        rec.stop();
+        console.log("🛑 音声認識停止");
+      } catch (e) {
+        console.error("音声認識停止エラー:", e);
+      }
+    });
+
+    rec.onresult = e => {
+      let transcript = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        transcript += e.results[i][0].transcript;
+      }
+      console.log("✅ 認識結果:", transcript);
+      input.value = transcript;
+    };
+
+    rec.onspeechstart = () => console.log("🎤 音声検出スタート");
+    rec.onspeechend = () => console.log("🛑 音声検出終了");
+    rec.onnomatch = () => console.warn("⚠️ 音声が認識されませんでした");
+    rec.onerror = e => console.error("❌ 音声認識エラー:", e.error);
   }
-  console.log("✅ 認識結果 transcript:", transcript);
-  input.value = transcript;
-};
-
-rec.onspeechstart = () => console.log("🎤 音声検出スタート");
-rec.onspeechend = () => console.log("🛑 音声検出終了");
-rec.onnomatch = () => console.warn("⚠️ 音声が認識されませんでした");
-rec.onerror = e => console.error("❌ 音声認識エラー:", e.error);
-
 
   // === 入力送信 ===
   if (caregiverSend) caregiverSend.addEventListener("click", () => {
@@ -161,13 +150,11 @@ rec.onerror = e => console.error("❌ 音声認識エラー:", e.error);
         const data = await res.json();
         document.getElementById("explanation").textContent = data.explanation;
 
-        // 日本語説明はそのままブラウザ読み上げ
         const utter = new SpeechSynthesisUtterance(data.explanation);
         utter.lang = "ja-JP";
         utter.volume = 1.0;
         utter.rate = 1.0;
         window.speechSynthesis.speak(utter);
-
       } catch (err) {
         alert("用語説明に失敗しました");
         console.error(err);
@@ -193,13 +180,11 @@ rec.onerror = e => console.error("❌ 音声認識エラー:", e.error);
         const data = await res.json();
         document.getElementById("translation-result").textContent = data.translated;
 
-        // 言語コードを決定
         let lang = "en-US";
         if (direction.includes("ja")) lang = "ja-JP";
         if (direction.includes("vi")) lang = "vi-VN";
         if (direction.includes("tl")) lang = "fil-PH";
 
-        // Google TTS を呼び出して音声再生
         const ttsRes = await fetch("/tts", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -247,13 +232,13 @@ rec.onerror = e => console.error("❌ 音声認識エラー:", e.error);
       btn.addEventListener("click", () => {
         appendMessage(currentRole, opt);
         currentRole = (currentRole === "caregiver") ? "caree" : "caregiver";
-        subOptionsContainer.innerHTML = ""; // 押したら消す
+        subOptionsContainer.innerHTML = ""; 
       });
       subOptionsContainer.appendChild(btn);
     });
   }
 
-  // === テンプレート表示（交互に介護士→被介護者） ===
+  // === テンプレート表示 ===
   function showTemplates() {
     templateContainer.innerHTML = "";
 
@@ -271,7 +256,7 @@ rec.onerror = e => console.error("❌ 音声認識エラー:", e.error);
           appendMessage("caree", `はい、${cat}は大丈夫です。`);
           currentRole = "caregiver";
         }
-        renderSubOptions(cat); // サブ選択肢を表示
+        renderSubOptions(cat);
       });
 
       templateContainer.appendChild(btn);
@@ -290,19 +275,15 @@ rec.onerror = e => console.error("❌ 音声認識エラー:", e.error);
   const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
   if (isMobile) {
-    // スマホではマイクボタンを隠す
     if (caregiverMic) caregiverMic.style.display = "none";
     if (careeMic) careeMic.style.display = "none";
 
-    // 案内メッセージを追加
     const notice = document.createElement("div");
     notice.textContent = "📱 スマホでは入力欄のマイク（キーボード機能）をご利用ください";
     notice.style.color = "gray";
     notice.style.fontSize = "0.9em";
     chatWindow.appendChild(notice);
-
   } else {
-    // PCではWeb Speech APIマイクを利用
     setupMic(caregiverMic, caregiverInput);
     setupMic(careeMic, careeInput);
   }
