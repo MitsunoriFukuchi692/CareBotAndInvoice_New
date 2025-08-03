@@ -84,6 +84,10 @@ def daily_report():
     return render_template("daily_report.html", now=now, text_report=text_report, images=images, videos=videos)
 
 # ─── 3. サーバーでPDF生成 ─────────────────────────
+from fpdf import FPDF   # fpdf2
+from PIL import Image   # ← 追加
+
+# ─── 3. サーバーでPDF生成 ─────────────────────────
 @app.route("/generate_pdf", methods=["GET"])
 def generate_pdf():
     now = (datetime.utcnow() + timedelta(hours=9)).strftime("%Y-%m-%d %H:%M")
@@ -115,15 +119,29 @@ def generate_pdf():
     pdf.multi_cell(0, 10, f"会話日報:\n{text_report}")
     pdf.ln(10)
 
-    # 最新1枚の写真を追加（カラーJPEG、幅70mm）
+    # 最新1枚の写真を追加（カラーJPEG、縮小版）
     all_media = os.listdir(UPLOAD_DIR)
     images = [f for f in all_media if f.startswith("image_")]
     if images:
         latest_img = os.path.join(UPLOAD_DIR, sorted(images)[-1])
         try:
-            pdf.image(latest_img, x=10, y=pdf.get_y(), w=70)
+            # Pillowで半分に縮小して一時保存
+            img = Image.open(latest_img).convert("RGB")
+            w, h = img.size
+            img = img.resize((w // 2, h // 2))
+            tmp_img = latest_img.replace(".jpg", "_small.jpg")
+            img.save(tmp_img, "JPEG")
+
+            pdf.image(tmp_img, x=10, y=pdf.get_y(), w=100)  # 幅100mm
+            pdf.ln(60)
         except Exception as e:
             logging.warning(f"画像挿入エラー: {e}")
+
+    # 動画はPDFに入れず、テキストだけ追加
+    videos = [f for f in all_media if f.startswith("video_")]
+    if videos:
+        pdf.set_font("Arial", size=12)
+        pdf.multi_cell(0, 10, "📹 最新の動画はサーバーに保存されています。")
 
     pdf_bytes = pdf.output(dest="S").encode("latin1")
     return (pdf_bytes, 200, {
