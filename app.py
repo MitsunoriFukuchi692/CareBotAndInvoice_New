@@ -12,8 +12,8 @@ from google.cloud import texttospeech
 import openai
 from openai import OpenAI
 import stripe
-from fpdf import FPDF   # fpdf2
-from PIL import Image   # 画像変換用
+from fpdf import FPDF
+from PIL import Image
 
 # ─── ログ設定 ─────────────────────────────────────
 logging.basicConfig(level=logging.DEBUG)
@@ -82,11 +82,12 @@ def daily_report():
     videos = [f for f in all_media if f.startswith("video_")]
     return render_template("daily_report.html", now=now, text_report=text_report, images=images, videos=videos)
 
-# ─── 3. サーバーでPDF生成 ─────────────────────────
+# ─── 3. サーバーでPDF生成（白紙防止版）───────────────
 @app.route("/generate_pdf", methods=["GET"])
 def generate_pdf():
     now = (datetime.utcnow() + timedelta(hours=9)).strftime("%Y-%m-%d %H:%M")
 
+    # 最新ログの要約
     files = sorted(glob.glob(os.path.join(LOG_DIR, "log_*.txt")))
     text_report = "ログがありません"
     if files:
@@ -112,9 +113,8 @@ def generate_pdf():
     pdf.cell(200, 10, f"作成日時: {now}", ln=True, align="C")
     pdf.set_font("Arial", size=12)
     pdf.multi_cell(0, 10, f"会話日報:\n{text_report}")
-    pdf.ln(10)
 
-    # 最新写真をカラーに変換して挿入
+    # 最新の写真（縮小＋高さ固定）
     all_media = os.listdir(UPLOAD_DIR)
     images = [f for f in all_media if f.startswith("image_")]
     if images:
@@ -122,23 +122,24 @@ def generate_pdf():
         try:
             img = Image.open(latest_img).convert("RGB")
             w, h = img.size
-            # ページ幅190mmに収まるよう縮小
-            max_w = 190
-            scale = max_w / w
+
+            # 高さを 150mm に収める（A4: 297mm以内）
+            max_h = 150
+            scale = max_h / h
             new_w, new_h = int(w * scale), int(h * scale)
             img = img.resize((new_w, new_h))
             tmp_img = latest_img.replace(".jpg", "_pdf.jpg")
-            img.save(tmp_img, "JPEG", quality=90, dpi=(150, 150))
+            img.save(tmp_img, "JPEG", quality=70, dpi=(100, 100))
 
-            y_before = pdf.get_y()
-            pdf.image(tmp_img, x=10, y=y_before, w=max_w)
-            pdf.ln(5)
+            y_before = pdf.get_y() + 10
+            pdf.image(tmp_img, x=10, y=y_before, h=max_h)  # 高さ固定
         except Exception as e:
             logging.warning(f"画像挿入エラー: {e}")
 
-    # 動画はPDFに入れず注記のみ
+    # 動画は注記のみ
     videos = [f for f in all_media if f.startswith("video_")]
     if videos:
+        pdf.ln(10)
         pdf.set_font("Arial", size=12)
         pdf.multi_cell(0, 10, "📹 最新の動画はサーバーに保存されています。")
 
