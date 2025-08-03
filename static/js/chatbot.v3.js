@@ -72,52 +72,35 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // === 音声認識（Web Speech API 日本語用） ===
-  function setupMic(button, input) {
-    if (!button) return;
-
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      console.warn("このブラウザは音声認識に対応していません");
-      return;
-    }
-
-    const rec = new SpeechRecognition();
-    rec.lang = "ja-JP";
-    rec.continuous = false;
-    rec.interimResults = false;
-
-    button.addEventListener("mousedown", () => {
-      try {
-        rec.start();
-        console.log("🎤 音声認識開始");
-      } catch (e) {
-        console.error("音声認識開始エラー:", e);
+function setupMic(button, input) {
+  if (button) {
+    button.addEventListener("click", () => {
+      console.log("🎤 マイクボタン押下");
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        alert("このブラウザは音声認識に対応していません");
+        return;
       }
+
+      const rec = new SpeechRecognition();
+      rec.lang = "ja-JP";
+      rec.interimResults = false;
+      rec.maxAlternatives = 1;
+
+      rec.onstart = () => console.log("🎙 音声認識開始");
+      rec.onerror = (e) => console.error("❌ 音声認識エラー:", e.error);
+      rec.onresult = e => {
+        const text = e.results[0][0].transcript;
+        console.log("✅ 認識結果:", text);
+        input.value = text;
+      };
+      rec.start();
     });
-
-    button.addEventListener("mouseup", () => {
-      try {
-        rec.stop();
-        console.log("🛑 音声認識停止");
-      } catch (e) {
-        console.error("音声認識停止エラー:", e);
-      }
-    });
-
-    rec.onresult = e => {
-      let transcript = "";
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        transcript += e.results[i][0].transcript;
-      }
-      console.log("✅ 認識結果:", transcript);
-      input.value = transcript;
-    };
-
-    rec.onspeechstart = () => console.log("🎤 音声検出スタート");
-    rec.onspeechend = () => console.log("🛑 音声検出終了");
-    rec.onnomatch = () => console.warn("⚠️ 音声が認識されませんでした");
-    rec.onerror = e => console.error("❌ 音声認識エラー:", e.error);
   }
+}
+setupMic(caregiverMic, caregiverInput);
+setupMic(careeMic, careeInput);
+
 
   // === 入力送信 ===
   if (caregiverSend) caregiverSend.addEventListener("click", () => {
