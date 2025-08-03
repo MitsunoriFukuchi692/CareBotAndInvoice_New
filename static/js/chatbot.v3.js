@@ -114,6 +114,20 @@ document.addEventListener("DOMContentLoaded", () => {
     console.error("音声認識エラー:", e.error);
   };
 }
+rec.onresult = e => {
+  console.log("🎯 onresult 発火:", e);
+  let transcript = "";
+  for (let i = e.resultIndex; i < e.results.length; i++) {
+    transcript += e.results[i][0].transcript;
+  }
+  console.log("✅ 認識結果 transcript:", transcript);
+  input.value = transcript;
+};
+
+rec.onspeechstart = () => console.log("🎤 音声検出スタート");
+rec.onspeechend = () => console.log("🛑 音声検出終了");
+rec.onnomatch = () => console.warn("⚠️ 音声が認識されませんでした");
+rec.onerror = e => console.error("❌ 音声認識エラー:", e.error);
 
 
   // === 入力送信 ===
