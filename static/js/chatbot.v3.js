@@ -163,10 +163,13 @@ setupMic(careeMic, careeInput);
         const data = await res.json();
         document.getElementById("translation-result").textContent = data.translated;
 
-        let lang = "en-US";
-        if (direction.includes("ja")) lang = "ja-JP";
-        if (direction.includes("vi")) lang = "vi-VN";
-        if (direction.includes("tl")) lang = "fil-PH";
+        let lang = "en-US"; // デフォルト英語
+　　　　 if (direction === "ja-en") lang = "en-US";   // 日本語→英語
+　　　　 if (direction === "en-ja") lang = "ja-JP";   // 英語→日本語
+　　　　 if (direction === "ja-vi") lang = "vi-VN";   // 日本語→ベトナム語
+　　　　 if (direction === "vi-ja") lang = "ja-JP";   // ベトナム語→日本語
+　　　　 if (direction === "ja-tl") lang = "fil-PH";  // 日本語→タガログ語
+　　　　 if (direction === "tl-ja") lang = "ja-JP";   // タガログ語→日本語
 
         const ttsRes = await fetch("/tts", {
           method: "POST",
