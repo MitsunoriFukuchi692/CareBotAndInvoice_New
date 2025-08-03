@@ -18,8 +18,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const careeMic = document.getElementById("mic-caree");
   const subOptionsContainer = document.getElementById("subOptionsContainer");
 
-  // 会話の役割（最初は介護士から）
-  let currentRole = "caregiver";
+  let currentRole = "caregiver"; // 会話の役割（最初は介護士から）
 
   // === メッセージ表示 + 読み上げ（日本語会話用） ===
   function appendMessage(role, text) {
@@ -31,14 +30,11 @@ document.addEventListener("DOMContentLoaded", () => {
     chatWindow.appendChild(div);
     chatWindow.scrollTop = chatWindow.scrollHeight;
 
-    // 日本語会話はブラウザ標準TTSで読み上げ
-    if (role === "caregiver" || role === "caree") {
-      const utter = new SpeechSynthesisUtterance(text);
-      utter.lang = "ja-JP";
-      utter.volume = 1.0;
-      utter.rate = 1.0;
-      window.speechSynthesis.speak(utter);
-    }
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = "ja-JP";
+    utter.volume = 1.0;
+    utter.rate = 1.0;
+    window.speechSynthesis.speak(utter);
   }
 
   // === 会話ログ保存 ===
@@ -72,41 +68,60 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // === 音声認識（Web Speech API 日本語用） ===
-function setupMic(button, input) {
-  if (!button) return;
+  function setupMic(button, input, sendButton) {
+    if (!button) return;
 
-  button.addEventListener("click", () => {
-    if (!("webkitSpeechRecognition" in window)) {
-      alert("このブラウザは音声認識に対応していません。");
-      return;
+    button.addEventListener("click", () => {
+      if (!("webkitSpeechRecognition" in window)) {
+        alert("このブラウザは音声認識に対応していません。");
+        return;
+      }
+
+      const rec = new webkitSpeechRecognition();
+      rec.lang = "ja-JP";
+      rec.interimResults = false;
+      rec.maxAlternatives = 1;
+
+      rec.onresult = e => {
+        input.value = e.results[0][0].transcript;
+        console.log("🎤 音声認識結果:", input.value);
+
+        // 音声入力完了後、自動で送信ボタンを押す
+        if (sendButton) {
+          sendButton.click();
+        }
+      };
+
+      rec.onerror = e => {
+        console.error("❌ 音声認識エラー:", e);
+        alert("マイク入力でエラーが発生しました。");
+      };
+
+      rec.onend = () => {
+        console.log("🔚 音声認識終了");
+      };
+
+      rec.start();
+      console.log("🎤 音声認識開始");
+    });
+  }
+
+  setupMic(caregiverMic, caregiverInput, caregiverSend);
+  setupMic(careeMic, careeInput, careeSend);
+
+  // === 入力送信 ===
+  if (caregiverSend) caregiverSend.addEventListener("click", () => {
+    if (caregiverInput.value.trim()) {
+      appendMessage("caregiver", caregiverInput.value);
+      caregiverInput.value = "";
     }
-
-    const rec = new webkitSpeechRecognition();
-    rec.lang = "ja-JP";
-    rec.interimResults = false;
-    rec.maxAlternatives = 1;
-
-    rec.onresult = e => {
-      input.value = e.results[0][0].transcript;
-      console.log("🎤 音声認識結果:", input.value);
-    };
-
-    rec.onerror = e => {
-      console.error("❌ 音声認識エラー:", e);
-      alert("マイク入力でエラーが発生しました。");
-    };
-
-    rec.onend = () => {
-      console.log("🔚 音声認識終了");
-    };
-
-    rec.start();
-    console.log("🎤 音声認識開始");
   });
-}
-
-setupMic(caregiverMic, caregiverInput);
-setupMic(careeMic, careeInput);
+  if (careeSend) careeSend.addEventListener("click", () => {
+    if (careeInput.value.trim()) {
+      appendMessage("caree", careeInput.value);
+      careeInput.value = "";
+    }
+  });
 
   // === 用語説明 ===
   if (explainBtn) {
@@ -125,13 +140,11 @@ setupMic(careeMic, careeInput);
         const data = await res.json();
         document.getElementById("explanation").textContent = data.explanation;
 
-        // 日本語説明はそのままブラウザ読み上げ
         const utter = new SpeechSynthesisUtterance(data.explanation);
         utter.lang = "ja-JP";
         utter.volume = 1.0;
         utter.rate = 1.0;
         window.speechSynthesis.speak(utter);
-
       } catch (err) {
         alert("用語説明に失敗しました");
         console.error(err);
@@ -157,13 +170,11 @@ setupMic(careeMic, careeInput);
         const data = await res.json();
         document.getElementById("translation-result").textContent = data.translated;
 
-        // 言語コードを決定
         let lang = "en-US";
         if (direction.includes("ja")) lang = "ja-JP";
         if (direction.includes("vi")) lang = "vi-VN";
         if (direction.includes("tl")) lang = "fil-PH";
 
-        // Google TTS を呼び出して音声再生
         const ttsRes = await fetch("/tts", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -211,16 +222,15 @@ setupMic(careeMic, careeInput);
       btn.addEventListener("click", () => {
         appendMessage(currentRole, opt);
         currentRole = (currentRole === "caregiver") ? "caree" : "caregiver";
-        subOptionsContainer.innerHTML = ""; // 押したら消す
+        subOptionsContainer.innerHTML = "";
       });
       subOptionsContainer.appendChild(btn);
     });
   }
 
-  // === テンプレート表示（交互に介護士→被介護者） ===
+  // === テンプレート表示 ===
   function showTemplates() {
     templateContainer.innerHTML = "";
-
     const categories = ["体調", "薬", "排便", "睡眠", "食事"];
     categories.forEach(cat => {
       const btn = document.createElement("button");
@@ -235,7 +245,7 @@ setupMic(careeMic, careeInput);
           appendMessage("caree", `はい、${cat}は大丈夫です。`);
           currentRole = "caregiver";
         }
-        renderSubOptions(cat); // サブ選択肢を表示
+        renderSubOptions(cat);
       });
 
       templateContainer.appendChild(btn);
