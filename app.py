@@ -14,7 +14,8 @@ from google.cloud import texttospeech
 import openai
 from openai import OpenAI
 import stripe
-from fpdf import FPDF   # fpdf2 を利用
+from fpdf import FPDF   # fpdf2
+from PIL import Image   # ★ 追加：カラー変換と縮小用
 
 # ─── ログ設定 ─────────────────────────────────────
 logging.basicConfig(level=logging.DEBUG)
@@ -84,10 +85,6 @@ def daily_report():
     return render_template("daily_report.html", now=now, text_report=text_report, images=images, videos=videos)
 
 # ─── 3. サーバーでPDF生成 ─────────────────────────
-from fpdf import FPDF   # fpdf2
-from PIL import Image   # ← 追加
-
-# ─── 3. サーバーでPDF生成 ─────────────────────────
 @app.route("/generate_pdf", methods=["GET"])
 def generate_pdf():
     now = (datetime.utcnow() + timedelta(hours=9)).strftime("%Y-%m-%d %H:%M")
@@ -119,25 +116,27 @@ def generate_pdf():
     pdf.multi_cell(0, 10, f"会話日報:\n{text_report}")
     pdf.ln(10)
 
-    # 最新1枚の写真を追加（カラーJPEG、縮小版）
+    # 最新の写真をカラーで縮小して追加
     all_media = os.listdir(UPLOAD_DIR)
     images = [f for f in all_media if f.startswith("image_")]
     if images:
         latest_img = os.path.join(UPLOAD_DIR, sorted(images)[-1])
         try:
-            # Pillowで半分に縮小して一時保存
+            # PillowでRGB JPEGに変換して半分に縮小
             img = Image.open(latest_img).convert("RGB")
             w, h = img.size
             img = img.resize((w // 2, h // 2))
-            tmp_img = latest_img.replace(".jpg", "_small.jpg")
-            img.save(tmp_img, "JPEG")
+            tmp_img = latest_img.replace(".jpg", "_rgb.jpg")
+            img.save(tmp_img, "JPEG", quality=85)
 
-            pdf.image(tmp_img, x=10, y=pdf.get_y(), w=100)  # 幅100mm
-            pdf.ln(60)
+            # ページ幅に収まるように挿入
+            y_before = pdf.get_y()
+            pdf.image(tmp_img, x=10, y=y_before, w=180)
+            pdf.ln(5)
         except Exception as e:
             logging.warning(f"画像挿入エラー: {e}")
 
-    # 動画はPDFに入れず、テキストだけ追加
+    # 動画はPDFに入れず、注記だけ追加
     videos = [f for f in all_media if f.startswith("video_")]
     if videos:
         pdf.set_font("Arial", size=12)
@@ -176,7 +175,7 @@ def upload_media():
     orig_name = file.filename or ""
     _, ext = os.path.splitext(orig_name)
     if not ext:
-        ext = ".webm" if media_type == "video" else ".jpg"  # 写真はJPEG想定
+        ext = ".webm" if media_type == "video" else ".jpg"
     ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
     filename = f"{media_type}_{ts}{ext}"
     path = os.path.join(UPLOAD_DIR, filename)
@@ -218,12 +217,11 @@ def translate_text():
     try:
         data = request.get_json()
         text = data.get("text", "")
-        direction = data.get("direction", "ja-en")  # ja-en / en-ja / ja-vi / vi-ja / ja-tl / tl-ja
+        direction = data.get("direction", "ja-en")
 
         if not text:
             return jsonify({"error": "翻訳するテキストがありません"}), 400
 
-        # 翻訳方向ごとにプロンプトを切替
         if direction == "ja-en":
             system_prompt = "次の日本語を英語に翻訳してください。"
         elif direction == "en-ja":
@@ -263,7 +261,6 @@ def save_log():
         if not log_text:
             return jsonify({"error": "ログが空です"}), 400
 
-        # ファイル名（日時付き）
         ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
         filename = os.path.join(LOG_DIR, f"log_{ts}.txt")
 
