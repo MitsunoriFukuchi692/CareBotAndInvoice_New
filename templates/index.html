@@ -1,73 +1,73 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>AIみまくん＋インボイスデモ</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=5">
+  <title>介護支援ボット</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <style>
+    /* 既存CSSがあればそのままでOK。下は軽い追記 */
+    .card { border:1px solid #e5e5e5; border-radius:12px; padding:12px; margin:12px 0; }
+    .row { display:flex; gap:8px; }
+    .row input { flex:1; padding:8px 10px; border:1px solid #ccc; border-radius:6px; }
+    .mono { font-family:ui-monospace,Consolas,Menlo,monospace; white-space:pre-wrap; }
+    button { background:#0d6efd; color:#fff; border:none; border-radius:999px; padding:8px 14px; cursor:pointer; }
+    button.secondary{ background:#6c757d; }
+  </style>
 </head>
 <body>
   <header>
-    <nav style="display:flex; justify-content:center; gap:1rem; margin:1rem 0;">
-      <a href="https://robostudy.jp/test/index.html" class="btn btn-outline-primary">🔙 戻る</a>
-      <a href="/camera-test/" class="btn btn-outline-secondary" target="_blank" rel="noopener">カメラテスト</a>
-      <a href="/daily_report" class="btn btn-outline-secondary" target="_blank" rel="noopener">見守りレポート</a>
+    <h1>介護支援ボット</h1>
+    <nav>
+      <a href="/">ホーム</a> |
+      <a href="/camera-test/">カメラ実験ページ</a> |
+      <a href="/daily_report">本日の見守りレポート</a>
     </nav>
   </header>
 
-  <main>
-    <h2 class="chat-title">介護支援ボット</h2>
-
-    <div style="margin: 1rem 0; text-align: center;">
-      <button id="template-start-btn" class="template-start">テンプレート対話開始</button>
-      <div id="template-buttons"></div>
-      <div id="subOptionsContainer" style="margin-top: 1rem;"></div>
-    </div>
-
-    <div id="chat-window"></div>
-
-    <div class="input-panel">
-      <label class="role-label caregiver" for="caregiver-input">介護士</label>
-      <input id="caregiver-input" type="text" placeholder="介護士の発言を入力">
-      <button id="mic-caregiver">🎤</button>
-      <button id="send-caregiver">送信</button>
-
-      <label class="role-label caree" for="caree-input">被介護者</label>
-      <input id="caree-input" type="text" placeholder="被介護者の発言を入力">
-      <button id="mic-caree">🎤</button>
-      <button id="send-caree">送信</button>
-    </div>
-
-    <div class="tts-panel">
-      <label>音量:<input type="range" id="volume-slider" min="0" max="1" step="0.1" value="1"></label>
-      <label>速度:<input type="range" id="rate-slider" min="0.5" max="2" step="0.1" value="1"></label>
-    </div>
-
-    <div id="glossary">
-      <input type="text" id="term" placeholder="用語を入力">
-      <button id="explain-btn">説明</button>
-      <p id="explanation"></p>
-    </div>
-
-    <div id="translation-panel">
-      <select id="translate-direction">
-        <option value="ja-en" selected>日本語→英語</option>
-        <option value="en-ja">英語→日本語</option>
-        <option value="ja-vi">日本語→ベトナム語</option>
-        <option value="vi-ja">ベトナム語→日本語</option>
-        <option value="ja-tl">日本語→タガログ語</option>
-        <option value="tl-ja">タガログ語→日本語</option>
-      </select>
-      <button id="translate-btn">翻訳</button>
-      <p id="translation-result"></p>
-    </div>
-
-    <div class="action-buttons">
-      <button id="save-log-btn">会話ログ保存</button>
-      <button id="daily-report-btn" onclick="window.open('/daily_report','_blank')">📝 日報を生成</button>
-    </div>
+  <!-- ここに既存のチャットUI（テンプレ、ログ、入力欄など）が入っている想定 -->
+  <main id="app-root">
+    <!-- 既存のチャットUIをそのまま残してください -->
   </main>
 
-  <script src="{{ url_for('static', filename='js/chatbot.v3.js') }}"></script>
+  <!-- ★ 用語説明（ここが新規追加） -->
+  <section class="card" aria-label="用語説明">
+    <h2>用語のかんたん説明（30文字以内）</h2>
+    <div class="row">
+      <input id="explain-input" placeholder="例：排便" />
+      <button id="explain-btn">説明</button>
+    </div>
+    <div id="explain-result" class="mono"></div>
+  </section>
+
+  <script src="/static/chatbot.v3.js"></script>
+  <script>
+    // 既存のチャット初期化は chatbot.v3.js 側に任せる
+
+    // === 用語説明だけ、このページ内で完結 ===
+    async function explainWord(word){
+      try{
+        const res = await fetch('/ja/explain?v=' + Date.now(), {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ word })
+        });
+        const text = await res.text();
+        let data; try{ data = JSON.parse(text); } catch { data = { definition: text || '説明に失敗' }; }
+        return data.definition || '説明に失敗';
+      }catch(e){
+        console.error(e);
+        return 'ネットワークエラー';
+      }
+    }
+    const $ = s => document.querySelector(s);
+    $('#explain-btn').addEventListener('click', async ()=>{
+      const w = $('#explain-input').value.trim();
+      if(!w){ $('#explain-result').textContent='入力してください'; return; }
+      $('#explain-result').textContent = '…生成中';
+      const ans = await explainWord(w);
+      $('#explain-result').textContent = ans;
+    });
+  </script>
 </body>
 </html>
