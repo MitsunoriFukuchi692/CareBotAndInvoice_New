@@ -4,19 +4,19 @@ document.addEventListener("DOMContentLoaded", () => {
   console.log("👉 スクリプト開始");
 
   // 要素取得
-  const chatWindow = document.getElementById("chat-window");
-  const caregiverInput = document.getElementById("caregiver-input");
-  const careeInput = document.getElementById("caree-input");
-  const caregiverSend = document.getElementById("send-caregiver");
-  const careeSend = document.getElementById("send-caree");
-  const explainBtn = document.getElementById("explain-btn");
-  const translateBtn = document.getElementById("translate-btn");
-  const saveBtn = document.getElementById("save-log-btn");
-  const templateStartBtn = document.getElementById("template-start-btn");
-  const templateContainer = document.getElementById("template-buttons");
-  const caregiverMic = document.getElementById("mic-caregiver");
-  const careeMic = document.getElementById("mic-caree");
-  const subOptionsContainer = document.getElementById("subOptionsContainer");
+  const chatWindow         = document.getElementById("chat-window");
+  const caregiverInput     = document.getElementById("caregiver-input");
+  const careeInput         = document.getElementById("caree-input");
+  const caregiverSend      = document.getElementById("send-caregiver");
+  const careeSend          = document.getElementById("send-caree");
+  const explainBtn         = document.getElementById("explain-btn");
+  const translateBtn       = document.getElementById("translate-btn");
+  const saveBtn            = document.getElementById("save-log-btn");
+  const templateStartBtn   = document.getElementById("template-start-btn");
+  const templateContainer  = document.getElementById("template-buttons");
+  const caregiverMic       = document.getElementById("mic-caregiver");
+  const careeMic           = document.getElementById("mic-caree");
+  const subOptionsContainer= document.getElementById("subOptionsContainer");
 
   // 会話の役割（最初は介護士から）
   let currentRole = "caregiver";
@@ -26,7 +26,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const div = document.createElement("div");
     div.classList.add("message");
     if (role === "caregiver") div.classList.add("caregiver");
-    if (role === "caree") div.classList.add("caree");
+    if (role === "caree")     div.classList.add("caree");
     div.textContent = (role === "caregiver" ? "介護士: " : "被介護者: ") + text;
     chatWindow.appendChild(div);
     chatWindow.scrollTop = chatWindow.scrollHeight;
@@ -45,10 +45,7 @@ document.addEventListener("DOMContentLoaded", () => {
   if (saveBtn) {
     saveBtn.addEventListener("click", async () => {
       const log = chatWindow.innerText.trim();
-      if (!log) {
-        alert("会話がありません");
-        return;
-      }
+      if (!log) { alert("会話がありません"); return; }
       const now = new Date();
       const timestamp = now.toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" });
       const logWithTime = `[${timestamp}]\n${log}`;
@@ -59,11 +56,8 @@ document.addEventListener("DOMContentLoaded", () => {
           body: JSON.stringify({ log: logWithTime })
         });
         const data = await res.json();
-        if (data.status === "success") {
-          alert("会話ログを保存しました。");
-        } else {
-          alert("保存に失敗しました。");
-        }
+        if (data.status === "success") alert("会話ログを保存しました。");
+        else alert("保存に失敗しました。");
       } catch (err) {
         alert("エラーが発生しました。");
         console.error(err);
@@ -72,15 +66,12 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // === 音声認識（Web Speech API 日本語用） ===
-function setupMic(button, input) {
-  if (button) {
+  function setupMic(button, input) {
+    if (!button) return;
     button.addEventListener("click", () => {
       console.log("🎤 マイクボタン押下");
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (!SpeechRecognition) {
-        alert("このブラウザは音声認識に対応していません");
-        return;
-      }
+      if (!SpeechRecognition) { alert("このブラウザは音声認識に対応していません"); return; }
 
       const rec = new SpeechRecognition();
       rec.lang = "ja-JP";
@@ -97,10 +88,21 @@ function setupMic(button, input) {
       rec.start();
     });
   }
-}
-setupMic(caregiverMic, caregiverInput);
-setupMic(careeMic, careeInput);
 
+  // PCではWeb Speech、スマホはキーボードのマイクを案内
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  if (isMobile) {
+    if (caregiverMic) caregiverMic.style.display = "none";
+    if (careeMic)     careeMic.style.display = "none";
+    const notice = document.createElement("div");
+    notice.textContent = "📱 スマホでは入力欄のマイク（キーボード機能）をご利用ください";
+    notice.style.color = "gray";
+    notice.style.fontSize = "0.9em";
+    chatWindow.appendChild(notice);
+  } else {
+    setupMic(caregiverMic, caregiverInput);
+    setupMic(careeMic, careeInput);
+  }
 
   // === 入力送信 ===
   if (caregiverSend) caregiverSend.addEventListener("click", () => {
@@ -116,28 +118,28 @@ setupMic(careeMic, careeInput);
     }
   });
 
-  // === 用語説明 ===
+  // === 用語説明（★チャットにも表示するように変更） ===
   if (explainBtn) {
     explainBtn.addEventListener("click", async () => {
       const term = document.getElementById("term").value.trim();
-      if (!term) {
-        alert("用語を入力してください");
-        return;
-      }
+      if (!term) { alert("用語を入力してください"); return; }
       try {
-        const res = await fetch("/ja/explain", {
+        const res = await fetch("/ja/explain?v=" + Date.now(), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ term, maxLength: 30 })
         });
+        // サーバは {explanation: "..."} を返す実装
         const data = await res.json();
-        document.getElementById("explanation").textContent = data.explanation;
+        const text = data.explanation || data.definition || "説明に失敗しました";
 
-        const utter = new SpeechSynthesisUtterance(data.explanation);
-        utter.lang = "ja-JP";
-        utter.volume = 1.0;
-        utter.rate = 1.0;
-        window.speechSynthesis.speak(utter);
+        // ① 画面の「説明」欄にも反映（翻訳ボタンが使えるように）
+        const expEl = document.getElementById("explanation");
+        if (expEl) expEl.textContent = text;
+
+        // ② 対話欄（吹き出し）にも投稿
+        appendMessage("caregiver", `【説明】${term}：${text}`);
+
       } catch (err) {
         alert("用語説明に失敗しました");
         console.error(err);
@@ -148,11 +150,8 @@ setupMic(careeMic, careeInput);
   // === 翻訳 + Google TTS 読み上げ ===
   if (translateBtn) {
     translateBtn.addEventListener("click", async () => {
-      const text = document.getElementById("explanation").textContent.trim();
-      if (!text) {
-        alert("先に用語説明を入れてください");
-        return;
-      }
+      const text = (document.getElementById("explanation").textContent || "").trim();
+      if (!text) { alert("先に用語説明を入れてください"); return; }
       try {
         const direction = document.getElementById("translate-direction").value;
         const res = await fetch("/ja/translate", {
@@ -164,12 +163,12 @@ setupMic(careeMic, careeInput);
         document.getElementById("translation-result").textContent = data.translated;
 
         let lang = "en-US"; // デフォルト英語
-　　　　 if (direction === "ja-en") lang = "en-US";   // 日本語→英語
-　　　　 if (direction === "en-ja") lang = "ja-JP";   // 英語→日本語
-　　　　 if (direction === "ja-vi") lang = "vi-VN";   // 日本語→ベトナム語
-　　　　 if (direction === "vi-ja") lang = "ja-JP";   // ベトナム語→日本語
-　　　　 if (direction === "ja-tl") lang = "fil-PH";  // 日本語→タガログ語
-　　　　 if (direction === "tl-ja") lang = "ja-JP";   // タガログ語→日本語
+        if (direction === "ja-en") lang = "en-US";
+        if (direction === "en-ja") lang = "ja-JP";
+        if (direction === "ja-vi") lang = "vi-VN";
+        if (direction === "vi-ja") lang = "ja-JP";
+        if (direction === "ja-tl") lang = "fil-PH";
+        if (direction === "tl-ja") lang = "ja-JP";
 
         const ttsRes = await fetch("/tts", {
           method: "POST",
@@ -179,14 +178,11 @@ setupMic(careeMic, careeInput);
         if (ttsRes.ok) {
           const audioBlob = await ttsRes.blob();
           const audioUrl = URL.createObjectURL(audioBlob);
-
           const audio = document.createElement("audio");
           audio.src = audioUrl;
           audio.autoplay = true;
           document.body.appendChild(audio);
-          audio.onended = () => {
-            document.body.removeChild(audio);
-          };
+          audio.onended = () => { document.body.removeChild(audio); };
         } else {
           console.error("TTS API error:", await ttsRes.text());
         }
@@ -204,7 +200,7 @@ setupMic(careeMic, careeInput);
 
     const optionsMap = {
       "体調": ["元気です", "少し調子が悪い", "休みたい"],
-      "薬": ["薬を飲みました", "まだ飲んでいません", "薬が切れました"],
+      "薬":   ["薬を飲みました", "まだ飲んでいません", "薬が切れました"],
       "排便": ["問題ありません", "便秘気味です", "下痢があります"],
       "睡眠": ["よく眠れました", "眠れなかった", "昼寝しました"],
       "食事": ["全部食べました", "少し残しました", "食欲がありません"]
@@ -218,7 +214,7 @@ setupMic(careeMic, careeInput);
       btn.addEventListener("click", () => {
         appendMessage(currentRole, opt);
         currentRole = (currentRole === "caregiver") ? "caree" : "caregiver";
-        subOptionsContainer.innerHTML = ""; 
+        subOptionsContainer.innerHTML = "";
       });
       subOptionsContainer.appendChild(btn);
     });
@@ -227,13 +223,11 @@ setupMic(careeMic, careeInput);
   // === テンプレート表示 ===
   function showTemplates() {
     templateContainer.innerHTML = "";
-
     const categories = ["体調", "薬", "排便", "睡眠", "食事"];
     categories.forEach(cat => {
       const btn = document.createElement("button");
       btn.textContent = cat;
       btn.classList.add("template-btn");
-
       btn.addEventListener("click", () => {
         if (currentRole === "caregiver") {
           appendMessage("caregiver", `${cat}についてどうですか？`);
@@ -244,7 +238,6 @@ setupMic(careeMic, careeInput);
         }
         renderSubOptions(cat);
       });
-
       templateContainer.appendChild(btn);
     });
   }
@@ -256,22 +249,4 @@ setupMic(careeMic, careeInput);
       showTemplates();
     });
   }
-
-  // === スマホ判定してマイク制御 ===
-  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-
-  if (isMobile) {
-    if (caregiverMic) caregiverMic.style.display = "none";
-    if (careeMic) careeMic.style.display = "none";
-
-    const notice = document.createElement("div");
-    notice.textContent = "📱 スマホでは入力欄のマイク（キーボード機能）をご利用ください";
-    notice.style.color = "gray";
-    notice.style.fontSize = "0.9em";
-    chatWindow.appendChild(notice);
-  } else {
-    setupMic(caregiverMic, caregiverInput);
-    setupMic(careeMic, careeInput);
-  }
-
 });
