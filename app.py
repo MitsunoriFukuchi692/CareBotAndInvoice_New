@@ -16,6 +16,13 @@ import os, time
 from io import BytesIO
 from pathlib import Path
 
+import sys, httpx
+logging.basicConfig(level=logging.INFO)
+logging.info(f"[BOOT] Python={sys.version}")
+logging.info(f"[BOOT] httpx={httpx.__version__}")
+import openai as _o
+logging.info(f"[BOOT] openai={_o.__version__}")
+
 app = Flask(__name__)
 CORS(app)
 
