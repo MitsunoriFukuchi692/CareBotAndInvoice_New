@@ -305,34 +305,36 @@ def photo_to_pdf():
         if not f:
             return jsonify({"ok": False, "error": "no photo"}), 400
 
-        # 受け取り画像 → RGB → 一時JPGに保存
         from PIL import Image
         import tempfile, os
-        img = Image.open(f.stream).convert("RGB")
+        from fpdf import FPDF
+        from io import BytesIO
+        from flask import send_file
 
+        # 画像→RGB→一時JPG
+        img = Image.open(f.stream).convert("RGB")
         with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
             tmp_path = tmp.name
             img.save(tmp_path, "JPEG", quality=92)
 
-        # PDF化（A4・左右10mm余白で横幅190mm）
-        from fpdf import FPDF
+        # PDF作成
         pdf = FPDF(unit="mm", format="A4")
         pdf.add_page()
         pdf.image(tmp_path, x=10, y=10, w=190)
 
-        # 出力
-        pdf_bytes = pdf.output(dest="S").encode("latin-1")
+        raw = pdf.output(dest="S")  # fpdf2 は bytes を返す版がある
+        pdf_bytes = raw if isinstance(raw, (bytes, bytearray)) else raw.encode("latin-1")
 
-        # 後始末
+        # 後片付け
         try:
             os.remove(tmp_path)
-        except Exception:
+        except:
             pass
 
-        return (pdf_bytes, 200, {
-            "Content-Type": "application/pdf",
-            "Content-Disposition": "attachment; filename=photo.pdf"
-        })
+        return send_file(BytesIO(pdf_bytes),
+                         mimetype="application/pdf",
+                         as_attachment=True,
+                         download_name="photo.pdf")
     except Exception as e:
         logging.exception(f"/photo-to-pdf error: {e}")
         return jsonify({"ok": False, "error": "pdf-failed"}), 500
