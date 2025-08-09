@@ -1,10 +1,8 @@
 import os, glob, logging, tempfile
 from datetime import datetime, timedelta
-
 from flask import (
     Flask, render_template, request,
-    jsonify, send_from_directory
-)
+    jsonify, send_from_directory)
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -14,33 +12,24 @@ from openai import OpenAI
 import stripe
 from fpdf import FPDF
 from PIL import Image
+import os, time
+from io import BytesIO
+from pathlib import Path
 
-# ─── ログ設定 ─────────────────────────────────────
-logging.basicConfig(level=logging.DEBUG)
-
-# ─── Google 認証設定 ─────────────────────────────────
-KEY_JSON_ENV = "GOOGLE_CREDENTIALS_JSON"
-json_str = os.getenv(KEY_JSON_ENV) or ""
-with tempfile.NamedTemporaryFile(delete=False, suffix=".json") as tmp:
-    tmp.write(json_str.encode("utf-8"))
-    tmp.flush()
-    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = tmp.name
-
-# ─── Flask 初期化 ───────────────────────────────────
-app = Flask(__name__, static_folder="static", template_folder="templates")
-app.config['VERSION'] = '20250802'
+app = Flask(__name__)
 CORS(app)
-limiter = Limiter(app, key_func=get_remote_address, default_limits=["10 per minute"])
 
 # ─── API キー設定 ────────────────────────────────────
 openai.api_key = os.getenv("OPENAI_API_KEY")
 client = OpenAI(api_key=openai.api_key)
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 
-# ─── 保存フォルダ準備 ───────────────────────────────
-UPLOAD_DIR, LOG_DIR = "uploads", "logs"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-os.makedirs(LOG_DIR, exist_ok=True)
+# ─── 保存フォルダ準備（統一）────────────────────────
+BASE_DIR = Path(__file__).resolve().parent
+UPLOAD_DIR = BASE_DIR / "static" / "uploads"   # ← 統一
+LOG_DIR = BASE_DIR / "logs"
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 # ─── キャッシュ無効化 ─────────────────────────────────
 @app.after_request
@@ -56,7 +45,7 @@ def add_header(response):
 def index():
     return render_template("index.html")
 
-# ─── 2. 日報生成（HTML表示）──────────────────────────
+# ─── 2. 日報生成（HTML表示＋PDF生成）──────────────────
 @app.route("/daily_report", methods=["GET"])
 def daily_report():
     now = (datetime.utcnow() + timedelta(hours=9)).strftime("%Y-%m-%d %H:%M")
@@ -82,12 +71,18 @@ def daily_report():
     videos = [f for f in all_media if f.startswith("video_")]
     return render_template("daily_report.html", now=now, text_report=text_report, images=images, videos=videos)
 
-# ─── 3. サーバーでPDF生成（白紙防止版）───────────────
-@app.route("/generate_pdf", methods=["GET"])
-def generate_pdf():
+@app.route("/generate_report_pdf", methods=["GET"])
+def generate_report_pdf():
     now = (datetime.utcnow() + timedelta(hours=9)).strftime("%Y-%m-%d %H:%M")
 
-    # 最新ログの要約
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=14)
+    pdf.cell(200, 10, "本日の見守りレポート", ln=True, align="C")
+    pdf.set_font("Arial", size=10)
+    pdf.cell(200, 10, f"作成日時: {now}", ln=True, align="C")
+
+    # 直近ログ要約
     files = sorted(glob.glob(os.path.join(LOG_DIR, "log_*.txt")))
     text_report = "ログがありません"
     if files:
@@ -105,36 +100,42 @@ def generate_pdf():
             logging.error(f"要約失敗: {e}")
             text_report = "要約に失敗しました"
 
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Arial", size=14)
-    pdf.cell(200, 10, "本日の見守りレポート", ln=True, align="C")
-    pdf.set_font("Arial", size=10)
-    pdf.cell(200, 10, f"作成日時: {now}", ln=True, align="C")
     pdf.set_font("Arial", size=12)
     pdf.multi_cell(0, 10, f"会話日報:\n{text_report}")
 
-    # 最新の写真（縮小＋高さ固定）
+    # 最新の写真（縮小＋高さ固定・カラー維持）
     all_media = os.listdir(UPLOAD_DIR)
     images = [f for f in all_media if f.startswith("image_")]
     if images:
         latest_img = os.path.join(UPLOAD_DIR, sorted(images)[-1])
         try:
+            from io import BytesIO
+            import tempfile
+
             img = Image.open(latest_img).convert("RGB")
             w, h = img.size
 
-            # 高さを 150mm に収める（A4: 297mm以内）
-            max_h = 150
+            max_h = 150  # mm（A4内に収まる高さ）
             scale = max_h / h
             new_w, new_h = int(w * scale), int(h * scale)
             img = img.resize((new_w, new_h))
-            tmp_img = latest_img.replace(".jpg", "_pdf.jpg")
-            img.save(tmp_img, "JPEG", quality=70, dpi=(100, 100))
+
+            # 一時JPGに正規化（拡張子非依存＆カラー維持）
+            tmp_jpg = None
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
+                tmp_jpg = tmp.name
+                img.save(tmp_jpg, "JPEG", quality=92)
 
             y_before = pdf.get_y() + 10
-            pdf.image(tmp_img, x=10, y=y_before, h=max_h)  # 高さ固定
+            pdf.image(tmp_jpg, x=10, y=y_before, h=max_h)
         except Exception as e:
             logging.warning(f"画像挿入エラー: {e}")
+        finally:
+            try:
+                if tmp_jpg and os.path.exists(tmp_jpg):
+                    os.remove(tmp_jpg)
+            except Exception:
+                pass
 
     # 動画は注記のみ
     videos = [f for f in all_media if f.startswith("video_")]
@@ -143,7 +144,7 @@ def generate_pdf():
         pdf.set_font("Arial", size=12)
         pdf.multi_cell(0, 10, "📹 最新の動画はサーバーに保存されています。")
 
-    pdf_bytes = pdf.output(dest="S").encode("latin1")
+    pdf_bytes = pdf.output(dest="S").encode("latin-1")
     return (pdf_bytes, 200, {
         "Content-Type": "application/pdf",
         "Content-Disposition": "attachment; filename=daily_report.pdf"
@@ -154,11 +155,18 @@ def generate_pdf():
 def camera_test():
     return render_template("camera_test.html")
 
-# ─── 5. メディアアップロード ─────────────────────────
+# ─── 5. メディアアップロード（最新1件運用）───────────
 @app.route("/upload_media", methods=["POST"])
 def upload_media():
+    """
+    フロントから
+      - media_type: "image" | "video"
+      - file: Blob/File
+    を受け取り保存。動画は常に最新1件だけ保持。
+    """
     media_type = request.form.get("media_type")
     file = request.files.get("file")
+
     if not media_type or not file:
         return jsonify({"error": "media_type or file missing"}), 400
 
@@ -191,21 +199,19 @@ def upload_media():
 def explain_term():
     try:
         data = request.get_json()
-        term = data.get("term", "")
-        if not term:
-            return jsonify({"error": "用語が空です"}), 400
+        word = data.get("word", "").strip()
+        if not word:
+            return jsonify({"error": "word is required"}), 400
 
-        response = client.chat.completions.create(
+        prompt = f"以下の用語を高齢者にも分かるように日本語で30文字以内で説明してください。\n用語: {word}"
+        resp = client.chat.completions.create(
             model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": "入力された用語を30文字以内で簡単に日本語で説明してください。"},
-                {"role": "user", "content": term}
-            ],
-            max_tokens=50
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=80,
+            temperature=0.2
         )
-        explanation = response.choices[0].message.content.strip()
-        return jsonify({"explanation": explanation})
-
+        short_def = resp.choices[0].message.content.strip()
+        return jsonify({"definition": short_def})
     except Exception as e:
         logging.error(f"用語説明エラー: {e}")
         return jsonify({"error": "用語説明に失敗しました"}), 500
@@ -246,78 +252,96 @@ def translate_text():
         )
         translated = response.choices[0].message.content.strip()
         return jsonify({"translated": translated})
-
     except Exception as e:
         logging.error(f"翻訳エラー: {e}")
         return jsonify({"error": "翻訳に失敗しました"}), 500
 
-# ─── 会話ログ保存 ───────────────────────────────
-@app.route("/ja/save_log", methods=["POST"])
-def save_log():
-    try:
-        data = request.get_json()
-        log_text = data.get("log", "").strip()
-        if not log_text:
-            return jsonify({"error": "ログが空です"}), 400
-
-        ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-        filename = os.path.join(LOG_DIR, f"log_{ts}.txt")
-
-        with open(filename, "w", encoding="utf-8") as f:
-            f.write(log_text)
-
-        logging.info(f"会話ログ保存: {filename}")
-        return jsonify({"status": "success", "filename": filename})
-
-    except Exception as e:
-        logging.error(f"会話ログ保存エラー: {e}")
-        return jsonify({"error": "会話ログ保存に失敗しました"}), 500
-
-# ─── アップロード済みファイルを配信 ─────────────────────────
-@app.route("/uploads/<path:filename>")
-def serve_upload(filename):
-    try:
-        return send_from_directory(UPLOAD_DIR, filename)
-    except Exception as e:
-        logging.error(f"ファイル配信エラー: {e}")
-        return "ファイルが見つかりません", 404
-
-# ─── Google TTS (翻訳結果読み上げ用) ───────────────────────────────
+# ─── TTS（Google Cloud Text-to-Speech）───────────────
 @app.route("/tts", methods=["POST"])
 def tts():
     try:
         data = request.get_json()
         text = data.get("text", "")
-        lang = data.get("lang", "en-US")
+        lang = data.get("lang", "ja-JP")
+        voice_name = data.get("voice", "")  # 例: "ja-JP-Wavenet-A"
 
         if not text:
-            return jsonify({"error": "text is empty"}), 400
+            return jsonify({"error": "読み上げるテキストがありません"}), 400
 
         client_tts = texttospeech.TextToSpeechClient()
         synthesis_input = texttospeech.SynthesisInput(text=text)
-
         voice = texttospeech.VoiceSelectionParams(
             language_code=lang,
-            ssml_gender=texttospeech.SsmlVoiceGender.NEUTRAL,
+            name=voice_name or None,
         )
-
         audio_config = texttospeech.AudioConfig(
             audio_encoding=texttospeech.AudioEncoding.MP3
         )
-
         response = client_tts.synthesize_speech(
             input=synthesis_input, voice=voice, audio_config=audio_config
         )
-
-        return (
-            response.audio_content,
-            200,
-            {"Content-Type": "audio/mpeg"}
-        )
-
+        return (response.audio_content, 200, {"Content-Type": "audio/mpeg"})
     except Exception as e:
         logging.error(f"TTSエラー: {e}")
         return jsonify({"error": "TTSに失敗しました"}), 500
+
+# === ここから追記 =========================================
+# 既存のUPLOAD_DIRを使用
+
+# 画像 → PDF（カラー維持・単体API）
+@app.post("/photo-to-pdf")
+def photo_to_pdf():
+    f = request.files.get("photo")
+    if not f:
+        return jsonify({"ok": False, "error": "no photo"}), 400
+
+    img = Image.open(f.stream).convert("RGB")
+    buf = BytesIO()
+    img.save(buf, format="JPEG", quality=92)
+    buf.seek(0)
+
+    pdf = FPDF(unit="mm", format="A4")
+    pdf.add_page()
+    pdf.image(buf, x=10, y=10, w=190)
+
+    pdf_bytes = pdf.output(dest="S").encode("latin-1")
+    return (pdf_bytes, 200, {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": "attachment; filename=photo.pdf"
+    })
+
+# 動画アップロード（別口API・必要なら使用）
+@app.post("/upload-video")
+def upload_video():
+    f = request.files.get("video")
+    if not f:
+        return jsonify({"ok": False, "error": "no file"}), 400
+
+    # 既存の動画は全削除（最新1件運用）
+    for name in os.listdir(UPLOAD_DIR):
+        if name.startswith("video_"):
+            try:
+                os.remove(os.path.join(UPLOAD_DIR, name))
+            except Exception as e:
+                logging.warning(f"古い動画削除失敗: {name}, {e}")
+
+    mime = (f.mimetype or "").lower()
+    ext = ".mp4" if "mp4" in mime else ".webm"
+    filename = f"video_{int(time.time())}{ext}"
+    save_path = os.path.join(UPLOAD_DIR, filename)
+    try:
+        f.save(save_path)
+    except Exception as e:
+        logging.error(f"動画保存エラー: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+    return jsonify({"ok": True, "url": f"/static/uploads/{filename}"})
+# === ここまで追記 =========================================
+
+# ─── メディア配信（必要なら）────────────────────────
+@app.route("/uploads/<path:filename>", methods=["GET"])
+def serve_uploads(filename):
+    return send_from_directory(UPLOAD_DIR, filename)
 
 # ─── メイン ───────────────────────────────────────
 if __name__ == "__main__":

@@ -5,52 +5,199 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>カメラ実験ページ</title>
   <style>
-    body { font-family: sans-serif; text-align: center; padding: 1rem; }
-    h1 { margin-bottom: 1rem; }
+    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans JP", sans-serif; text-align: center; padding: 1rem; }
+    h1 { margin-bottom: 0.5rem; }
+    .row { display: grid; grid-template-columns: 1fr; gap: .75rem; max-width: 760px; margin: 0 auto; }
+    @media (min-width: 768px){ .row { grid-template-columns: 1fr 1fr; } }
     video, canvas, img {
-      display: block;
-      max-width: 100%;
-      height: auto;
-      object-fit: contain;
-      margin: 0.5rem auto;
-      border: 1px solid #ccc;
-      border-radius: 4px;
+      width: 100%; height: auto; object-fit: contain; border: 1px solid #ccc; border-radius: 8px; background: #fafafa;
     }
+    .actions { margin: .5rem 0 .75rem; }
     button {
-      display: inline-block;
-      margin: 0.5rem;
-      padding: 0.5rem 1rem;
-      font-size: 1rem;
-      border: none;
-      border-radius: 4px;
-      background: #007bff;
-      color: white;
+      display: inline-block; margin: .25rem; padding: .6rem 1rem; font-size: 1rem;
+      border: none; border-radius: 999px; background: #0d6efd; color: #fff;
     }
-    button:hover { background: #0056b3; cursor: pointer; }
+    button.secondary { background: #6c757d; }
+    button:disabled { opacity:.55; }
+    .note { font-size: .9rem; color: #555; }
   </style>
 </head>
 <body>
   <h1>カメラ実験ページ</h1>
+  <div class="note">PCは <b>WebM</b> 、Safari等はフォールバックでファイル選択に対応します。</div>
 
-<!-- プレビュー -->
-<video id="preview" autoplay playsinline></video>
+  <div class="actions">
+    <button id="front-btn" class="secondary">前面カメラ</button>
+    <button id="back-btn" class="secondary">背面カメラ</button>
+  </div>
 
-<!-- カメラ切替 -->
-<div>
-  <button id="front-btn">前面カメラ</button>
-  <button id="back-btn">背面カメラ</button>
-</div>
+  <div class="row">
+    <div>
+      <video id="preview" autoplay playsinline muted></video>
+      <div class="actions">
+        <button id="record-start">録画開始</button>
+        <button id="record-stop" class="secondary" disabled>録画停止</button>
+      </div>
+      <video id="recorded" controls></video>
+      <div class="actions">
+        <button id="upload-video" class="secondary" disabled>動画をアップロード</button>
+      </div>
+    </div>
 
-<!-- 録画 -->
-<button id="record-video-btn">8秒間 動画撮影</button>
-<video id="recorded-video" controls></video>
+    <div>
+      <canvas id="photo-canvas" width="640" height="480"></canvas>
+      <div class="actions">
+        <button id="take-photo">写真を撮る</button>
+        <button id="save-pdf" class="secondary" disabled>PDFにして保存（カラー）</button>
+      </div>
+    </div>
+  </div>
 
-<!-- 写真 -->
-<button id="take-photo-btn">写真を撮る</button>
-<canvas id="photo-canvas" width="320" height="240"></canvas>
+  <!-- フォールバック（iOS Safariなど向け） -->
+  <input id="video-file-input" type="file" accept="video/*" capture="environment" style="display:none">
 
-<!-- 保存 -->
-<button id="upload-btn">保存＆アップロード</button>
+  <script>
+    const $ = (s)=>document.querySelector(s);
+    const preview = $('#preview');
+    const canvas = $('#photo-canvas');
+    const recorded = $('#recorded');
+    const ctx = canvas.getContext('2d');
+    const frontBtn = $('#front-btn');
+    const backBtn = $('#back-btn');
+    const recStart = $('#record-start');
+    const recStop = $('#record-stop');
+    const upVideo = $('#upload-video');
+    const takePhoto = $('#take-photo');
+    const savePdf = $('#save-pdf');
+    const fileInput = $('#video-file-input');
 
-<script src="{{ url_for('static', filename='js/camera.js') }}?v=3"></script>
+    let stream = null;
+    let recorder = null;
+    let recordedBlob = null;
 
+    async function getStream(facingMode = 'environment'){
+      if (stream) stream.getTracks().forEach(t=>t.stop());
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode }, audio: true
+      });
+      preview.srcObject = stream;
+    }
+
+    async function init(){
+      try {
+        await getStream('environment');
+      } catch(e){
+        alert('カメラ取得に失敗しました: ' + e.message);
+      }
+    }
+
+    frontBtn.onclick = ()=>getStream('user');
+    backBtn.onclick  = ()=>getStream('environment');
+
+    // 録画
+    function pickSupportedMime(){
+      const cands = [
+        'video/webm;codecs=vp9',
+        'video/webm;codecs=vp8',
+        'video/webm',
+        'video/mp4;codecs=h264' // 一部環境のみ
+      ];
+      for (const t of cands){
+        if (window.MediaRecorder && MediaRecorder.isTypeSupported(t)) return t;
+      }
+      return '';
+    }
+
+    recStart.onclick = async ()=>{
+      if (!stream){
+        try { await init(); } catch {}
+      }
+      const mimeType = pickSupportedMime();
+
+      if (!window.MediaRecorder){
+        // フォールバック（非対応端末）
+        fileInput.click();
+        return;
+      }
+
+      const options = mimeType ? { mimeType } : {};
+      recorder = new MediaRecorder(stream, options);
+      const chunks = [];
+      recorder.ondataavailable = e => e.data && e.data.size && chunks.push(e.data);
+      recorder.onstop = ()=>{
+        const type = mimeType || 'video/webm';
+        recordedBlob = new Blob(chunks, { type });
+        recorded.src = URL.createObjectURL(recordedBlob);
+        upVideo.disabled = false;
+      };
+      recorder.start();
+      recStart.disabled = true;
+      recStop.disabled = false;
+
+      // 必要なら8秒で自動停止
+      // setTimeout(()=>{ if (recorder && recorder.state==='recording') recorder.stop(); }, 8000);
+    };
+
+    recStop.onclick = ()=>{
+      if (recorder && recorder.state === 'recording'){
+        recorder.stop();
+        recStart.disabled = false;
+        recStop.disabled = true;
+      }
+    };
+
+    fileInput.onchange = ()=>{
+      const f = fileInput.files[0];
+      if (!f) return;
+      recordedBlob = f;
+      recorded.src = URL.createObjectURL(f);
+      upVideo.disabled = false;
+    };
+
+    upVideo.onclick = async ()=>{
+      if (!recordedBlob) return;
+      const fd = new FormData();
+      // サーバ側でext決定できるが、念のためファイル名も付与
+      const isMp4 = (recordedBlob.type || '').includes('mp4') || (recordedBlob.name||'').endsWith('.mp4');
+      fd.append('video', recordedBlob, 'capture.' + (isMp4 ? 'mp4':'webm'));
+      const res = await fetch('/upload-video', { method:'POST', body: fd });
+      if (!res.ok){ alert('動画アップロード失敗'); return; }
+      const j = await res.json();
+      alert('保存しました: ' + (j.url || ''));
+      upVideo.disabled = true;
+    };
+
+    // 写真→キャンバス→PDF
+    takePhoto.onclick = ()=>{
+      if (!stream){ alert('カメラがありません'); return; }
+      const videoTrack = stream.getVideoTracks()[0];
+      const settings = videoTrack.getSettings ? videoTrack.getSettings() : {};
+      // キャンバスサイズを動画サイズに合わせる
+      const vw = (settings.width || preview.videoWidth || 640);
+      const vh = (settings.height || preview.videoHeight || 480);
+      canvas.width = vw; canvas.height = vh;
+      ctx.drawImage(preview, 0, 0, vw, vh);
+      savePdf.disabled = false;
+    };
+
+    savePdf.onclick = async ()=>{
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.92); // JPEG固定で送る
+      const blob = await (await fetch(dataUrl)).blob();
+      const fd = new FormData();
+      fd.append('photo', blob, 'capture.jpg');
+      const res = await fetch('/photo-to-pdf', { method:'POST', body: fd });
+      if (!res.ok){ alert('PDF生成失敗'); return; }
+      const pdfBlob = await res.blob();
+      const url = URL.createObjectURL(pdfBlob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'photo.pdf';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    };
+
+    init();
+  </script>
+</body>
+</html>
