@@ -10,3 +10,4 @@ supabase
 gTTS
 stripe
 fpdf2
+Pillow

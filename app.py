@@ -198,23 +198,33 @@ def upload_media():
 @app.route("/ja/explain", methods=["POST"])
 def explain_term():
     try:
-        data = request.get_json()
-        word = data.get("word", "").strip()
+        data = request.get_json(force=True, silent=True) or {}
+        word = (data.get("word") or "").strip()
         if not word:
-            return jsonify({"error": "word is required"}), 400
+            return jsonify({"definition": "用語が空です"}), 200  # 固まらないよう200で返す
 
         prompt = f"以下の用語を高齢者にも分かるように日本語で30文字以内で説明してください。\n用語: {word}"
-        resp = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=80,
-            temperature=0.2
-        )
-        short_def = resp.choices[0].message.content.strip()
-        return jsonify({"definition": short_def})
+
+        try:
+            resp = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=80,
+                temperature=0.2,
+                timeout=12,  # 応答が遅いときに固まらない
+            )
+            short_def = (resp.choices[0].message.content or "").strip()
+            if not short_def:
+                short_def = "短い説明を生成できませんでした"
+            return jsonify({"definition": short_def}), 200
+        except Exception as inner:
+            logging.warning(f"OpenAI失敗: {inner}")
+            # フォールバックの短文（最低限）
+            return jsonify({"definition": f"{word}: かんたんな説明です"}), 200
+
     except Exception as e:
-        logging.error(f"用語説明エラー: {e}")
-        return jsonify({"error": "用語説明に失敗しました"}), 500
+        logging.exception(f"/ja/explain error: {e}")
+        return jsonify({"definition": "説明に失敗しました"}), 200
 
 # ─── 翻訳 ───────────────────────────────
 @app.route("/ja/translate", methods=["POST"])
@@ -286,57 +296,46 @@ def tts():
         return jsonify({"error": "TTSに失敗しました"}), 500
 
 # === ここから追記 =========================================
-# 既存のUPLOAD_DIRを使用
 
 # 画像 → PDF（カラー維持・単体API）
 @app.post("/photo-to-pdf")
 def photo_to_pdf():
-    f = request.files.get("photo")
-    if not f:
-        return jsonify({"ok": False, "error": "no photo"}), 400
-
-    img = Image.open(f.stream).convert("RGB")
-    buf = BytesIO()
-    img.save(buf, format="JPEG", quality=92)
-    buf.seek(0)
-
-    pdf = FPDF(unit="mm", format="A4")
-    pdf.add_page()
-    pdf.image(buf, x=10, y=10, w=190)
-
-    pdf_bytes = pdf.output(dest="S").encode("latin-1")
-    return (pdf_bytes, 200, {
-        "Content-Type": "application/pdf",
-        "Content-Disposition": "attachment; filename=photo.pdf"
-    })
-
-# 動画アップロード（別口API・必要なら使用）
-@app.post("/upload-video")
-def upload_video():
-    f = request.files.get("video")
-    if not f:
-        return jsonify({"ok": False, "error": "no file"}), 400
-
-    # 既存の動画は全削除（最新1件運用）
-    for name in os.listdir(UPLOAD_DIR):
-        if name.startswith("video_"):
-            try:
-                os.remove(os.path.join(UPLOAD_DIR, name))
-            except Exception as e:
-                logging.warning(f"古い動画削除失敗: {name}, {e}")
-
-    mime = (f.mimetype or "").lower()
-    ext = ".mp4" if "mp4" in mime else ".webm"
-    filename = f"video_{int(time.time())}{ext}"
-    save_path = os.path.join(UPLOAD_DIR, filename)
     try:
-        f.save(save_path)
-    except Exception as e:
-        logging.error(f"動画保存エラー: {e}")
-        return jsonify({"ok": False, "error": str(e)}), 500
+        f = request.files.get("photo")
+        if not f:
+            return jsonify({"ok": False, "error": "no photo"}), 400
 
-    return jsonify({"ok": True, "url": f"/static/uploads/{filename}"})
-# === ここまで追記 =========================================
+        # 受け取り画像 → RGB → 一時JPGに保存
+        from PIL import Image
+        import tempfile, os
+        img = Image.open(f.stream).convert("RGB")
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
+            tmp_path = tmp.name
+            img.save(tmp_path, "JPEG", quality=92)
+
+        # PDF化（A4・左右10mm余白で横幅190mm）
+        from fpdf import FPDF
+        pdf = FPDF(unit="mm", format="A4")
+        pdf.add_page()
+        pdf.image(tmp_path, x=10, y=10, w=190)
+
+        # 出力
+        pdf_bytes = pdf.output(dest="S").encode("latin-1")
+
+        # 後始末
+        try:
+            os.remove(tmp_path)
+        except Exception:
+            pass
+
+        return (pdf_bytes, 200, {
+            "Content-Type": "application/pdf",
+            "Content-Disposition": "attachment; filename=photo.pdf"
+        })
+    except Exception as e:
+        logging.exception(f"/photo-to-pdf error: {e}")
+        return jsonify({"ok": False, "error": "pdf-failed"}), 500
 
 # ─── メディア配信（必要なら）────────────────────────
 @app.route("/uploads/<path:filename>", methods=["GET"])
