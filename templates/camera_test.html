@@ -7,24 +7,29 @@
   <style>
     body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans JP", sans-serif; text-align: center; padding: 1rem; }
     h1 { margin-bottom: 0.5rem; }
-    .row { display: grid; grid-template-columns: 1fr; gap: .75rem; max-width: 760px; margin: 0 auto; }
-    @media (min-width: 768px){ .row { grid-template-columns: 1fr 1fr; } }
-    video, canvas, img {
+    .row { display: grid; grid-template-columns: 1fr; gap: .75rem; max-width: 900px; margin: 0 auto; }
+    @media (min-width: 840px){ .row { grid-template-columns: 1fr 1fr; } }
+    video, canvas {
       width: 100%; height: auto; object-fit: contain; border: 1px solid #ccc; border-radius: 8px; background: #fafafa;
     }
     .actions { margin: .5rem 0 .75rem; }
     button {
       display: inline-block; margin: .25rem; padding: .6rem 1rem; font-size: 1rem;
-      border: none; border-radius: 999px; background: #0d6efd; color: #fff;
+      border: none; border-radius: 999px; background: #0d6efd; color: #fff; cursor: pointer;
     }
     button.secondary { background: #6c757d; }
-    button:disabled { opacity:.55; }
-    .note { font-size: .9rem; color: #555; }
+    button:disabled { opacity:.55; cursor: not-allowed; }
+    .note { font-size: .9rem; color: #555; margin-bottom: .5rem; }
+    .card { border: 1px solid #e5e5e5; border-radius: 12px; padding: 0.75rem; margin-top: 1rem; text-align: left; }
+    .card h2 { margin: 0 0 .5rem; font-size: 1.05rem; }
+    .field { display: flex; gap: .5rem; margin: .5rem 0; }
+    .field input { flex: 1; padding: .5rem .75rem; border:1px solid #ccc; border-radius: 6px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size: .95rem; white-space: pre-wrap; }
   </style>
 </head>
 <body>
   <h1>カメラ実験ページ</h1>
-  <div class="note">PCは <b>WebM</b> 、Safari等はフォールバックでファイル選択に対応します。</div>
+  <div class="note">PCは <b>WebM</b> で録画、Safari等はフォールバック（動画ファイル選択）に対応。</div>
 
   <div class="actions">
     <button id="front-btn" class="secondary">前面カメラ</button>
@@ -32,6 +37,7 @@
   </div>
 
   <div class="row">
+    <!-- 左：録画 -->
     <div>
       <video id="preview" autoplay playsinline muted></video>
       <div class="actions">
@@ -44,6 +50,7 @@
       </div>
     </div>
 
+    <!-- 右：写真→PDF -->
     <div>
       <canvas id="photo-canvas" width="640" height="480"></canvas>
       <div class="actions">
@@ -53,15 +60,26 @@
     </div>
   </div>
 
-  <!-- フォールバック（iOS Safariなど向け） -->
+  <!-- 用語説明 -->
+  <div class="card">
+    <h2>用語のかんたん説明（30文字以内）</h2>
+    <div class="field">
+      <input id="explain-input" placeholder="例：排便" />
+      <button id="explain-btn">説明</button>
+    </div>
+    <div id="explain-result" class="mono"></div>
+  </div>
+
+  <!-- フォールバック（iOS Safariなど） -->
   <input id="video-file-input" type="file" accept="video/*" capture="environment" style="display:none">
 
   <script>
     const $ = (s)=>document.querySelector(s);
     const preview = $('#preview');
     const canvas = $('#photo-canvas');
-    const recorded = $('#recorded');
     const ctx = canvas.getContext('2d');
+    const recorded = $('#recorded');
+
     const frontBtn = $('#front-btn');
     const backBtn = $('#back-btn');
     const recStart = $('#record-start');
@@ -71,55 +89,33 @@
     const savePdf = $('#save-pdf');
     const fileInput = $('#video-file-input');
 
+    const explainInput = $('#explain-input');
+    const explainBtn = $('#explain-btn');
+    const explainResult = $('#explain-result');
+
     let stream = null;
     let recorder = null;
     let recordedBlob = null;
 
     async function getStream(facingMode = 'environment'){
       if (stream) stream.getTracks().forEach(t=>t.stop());
-      stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode }, audio: true
-      });
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode }, audio: true });
       preview.srcObject = stream;
     }
-
-    async function init(){
-      try {
-        await getStream('environment');
-      } catch(e){
-        alert('カメラ取得に失敗しました: ' + e.message);
-      }
-    }
-
+    async function init(){ try { await getStream('environment'); } catch(e){ alert('カメラ取得に失敗: '+e.message); } }
     frontBtn.onclick = ()=>getStream('user');
     backBtn.onclick  = ()=>getStream('environment');
 
     // 録画
     function pickSupportedMime(){
-      const cands = [
-        'video/webm;codecs=vp9',
-        'video/webm;codecs=vp8',
-        'video/webm',
-        'video/mp4;codecs=h264' // 一部環境のみ
-      ];
-      for (const t of cands){
-        if (window.MediaRecorder && MediaRecorder.isTypeSupported(t)) return t;
-      }
+      const cands = ['video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm','video/mp4;codecs=h264'];
+      for (const t of cands){ if (window.MediaRecorder && MediaRecorder.isTypeSupported(t)) return t; }
       return '';
     }
-
     recStart.onclick = async ()=>{
-      if (!stream){
-        try { await init(); } catch {}
-      }
       const mimeType = pickSupportedMime();
-
-      if (!window.MediaRecorder){
-        // フォールバック（非対応端末）
-        fileInput.click();
-        return;
-      }
-
+      if (!window.MediaRecorder){ fileInput.click(); return; }
+      if (!stream){ await init(); }
       const options = mimeType ? { mimeType } : {};
       recorder = new MediaRecorder(stream, options);
       const chunks = [];
@@ -131,70 +127,72 @@
         upVideo.disabled = false;
       };
       recorder.start();
-      recStart.disabled = true;
-      recStop.disabled = false;
-
-      // 必要なら8秒で自動停止
-      // setTimeout(()=>{ if (recorder && recorder.state==='recording') recorder.stop(); }, 8000);
+      recStart.disabled = true; recStop.disabled = false;
     };
-
     recStop.onclick = ()=>{
-      if (recorder && recorder.state === 'recording'){
-        recorder.stop();
-        recStart.disabled = false;
-        recStop.disabled = true;
-      }
+      if (recorder && recorder.state === 'recording'){ recorder.stop(); recStart.disabled = false; recStop.disabled = true; }
     };
-
     fileInput.onchange = ()=>{
-      const f = fileInput.files[0];
-      if (!f) return;
-      recordedBlob = f;
-      recorded.src = URL.createObjectURL(f);
-      upVideo.disabled = false;
+      const f = fileInput.files[0]; if (!f) return;
+      recordedBlob = f; recorded.src = URL.createObjectURL(f); upVideo.disabled = false;
     };
-
     upVideo.onclick = async ()=>{
       if (!recordedBlob) return;
       const fd = new FormData();
-      // サーバ側でext決定できるが、念のためファイル名も付与
       const isMp4 = (recordedBlob.type || '').includes('mp4') || (recordedBlob.name||'').endsWith('.mp4');
-      fd.append('video', recordedBlob, 'capture.' + (isMp4 ? 'mp4':'webm'));
-      const res = await fetch('/upload-video', { method:'POST', body: fd });
+      fd.append('media_type', 'video'); // ← /upload_media が必須で見る
+      fd.append('file', recordedBlob, 'capture.' + (isMp4 ? 'mp4':'webm'));
+      const res = await fetch('/upload_media?v=' + Date.now(), { method:'POST', body: fd });
       if (!res.ok){ alert('動画アップロード失敗'); return; }
       const j = await res.json();
-      alert('保存しました: ' + (j.url || ''));
+      alert('保存しました: ' + (j.url || j.filename || ''));
       upVideo.disabled = true;
     };
 
-    // 写真→キャンバス→PDF
+    // 写真→PDF
     takePhoto.onclick = ()=>{
       if (!stream){ alert('カメラがありません'); return; }
-      const videoTrack = stream.getVideoTracks()[0];
-      const settings = videoTrack.getSettings ? videoTrack.getSettings() : {};
-      // キャンバスサイズを動画サイズに合わせる
-      const vw = (settings.width || preview.videoWidth || 640);
-      const vh = (settings.height || preview.videoHeight || 480);
+      const vTrack = stream.getVideoTracks()[0];
+      const s = vTrack.getSettings ? vTrack.getSettings() : {};
+      const vw = (s.width || preview.videoWidth || 640);
+      const vh = (s.height || preview.videoHeight || 480);
       canvas.width = vw; canvas.height = vh;
       ctx.drawImage(preview, 0, 0, vw, vh);
-      savePdf.disabled = false;
+      savePdf.disabled = true; // 連打防止
+      setTimeout(()=> savePdf.disabled = false, 200);
     };
-
     savePdf.onclick = async ()=>{
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.92); // JPEG固定で送る
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.92); // JPEG固定
       const blob = await (await fetch(dataUrl)).blob();
-      const fd = new FormData();
-      fd.append('photo', blob, 'capture.jpg');
-      const res = await fetch('/photo-to-pdf', { method:'POST', body: fd });
+      const fd = new FormData(); fd.append('photo', blob, 'capture.jpg');
+      const res = await fetch('/photo-to-pdf?v=' + Date.now(), { method:'POST', body: fd });
       if (!res.ok){ alert('PDF生成失敗'); return; }
       const pdfBlob = await res.blob();
       const url = URL.createObjectURL(pdfBlob);
-      const a = document.createElement('a');
-      a.href = url; a.download = 'photo.pdf';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+      const a = document.createElement('a'); a.href = url; a.download = 'photo.pdf';
+      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    };
+
+    // 用語説明（サーバが200以外を返さなくても、text→JSONで堅牢）
+    async function explainWord(word){
+      try{
+        const res = await fetch('/ja/explain?v=' + Date.now(), {
+          method: 'POST',
+          headers: { 'Content-Type':'application/json' },
+          body: JSON.stringify({ word })
+        });
+        const text = await res.text();
+        let data; try { data = JSON.parse(text); } catch { data = { definition: text || '説明に失敗' }; }
+        return data.definition || '説明に失敗';
+      }catch(e){
+        console.error(e); return 'ネットワークエラー';
+      }
+    }
+    explainBtn.onclick = async ()=>{
+      const w = explainInput.value.trim();
+      explainResult.textContent = '…生成中';
+      const ans = await explainWord(w);
+      explainResult.textContent = ans;
     };
 
     init();
