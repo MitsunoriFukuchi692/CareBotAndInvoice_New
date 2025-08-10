@@ -165,29 +165,25 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // === 用語説明 ===
-  if (explainBtn) {
-    explainBtn.addEventListener("click", async () => {
-      const term = document.getElementById("term").value.trim();
-      if (!term) {
-        alert("用語を入力してください");
-        return;
-      }
-      try {
-        const res = await fetch("/ja/explain", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ term, maxLength: 30 })
-        });
-        const data = await res.json();
-        console.log("explain response:", data);
-        document.getElementById("explanation").textContent = data.explanation;
-        speak(data.explanation, "caregiver");
-      } catch (err) {
-        alert("用語説明に失敗しました");
-        console.error(err);
-      }
-    });
-  }
+  const res = await fetch("/ja/explain", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ term, maxLength: 30 })
+});
+
+// レスポンス確認ログ
+console.log("[explain] status:", res.status);
+let dataText = await res.text();
+console.log("[explain] raw:", dataText);
+let data = {};
+try { data = JSON.parse(dataText); } catch(e) { console.warn("JSON parse failed"); }
+
+const text =
+  data.explanation ?? data.message ?? data.result ?? data.summary ?? "";
+
+document.getElementById("explanation").textContent = text || "(取得できませんでした)";
+if (!text) console.warn("[explain] unexpected payload keys:", Object.keys(data));
+speak(text || "", "caregiver");
 
   // === 翻訳 ===
   if (translateBtn) {
