@@ -189,27 +189,36 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // === 翻訳 ===
   if (translateBtn) {
-    translateBtn.addEventListener("click", async () => {
-      const text = document.getElementById("explanation").textContent.trim();
-      if (!text) {
-        alert("先に用語説明を入れてください");
-        return;
-      }
-      try {
-        const res = await fetch("/ja/translate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text, direction: "ja-en" })
-        });
-        const data = await res.json();
-        document.getElementById("translation-result").textContent = data.translated;
-        speak(data.translated, "translation"); // 🔊 英語を米国発音で読み上げ
-      } catch (err) {
-        alert("翻訳に失敗しました");
-        console.error(err);
-      }
-    });
-  }
+  translateBtn.addEventListener("click", async () => {
+    const text = document.getElementById("explanation").textContent.trim();
+    if (!text) {
+      alert("先に用語説明を入れてください");
+      return;
+    }
+    try {
+      const direction = document.getElementById("translate-direction").value; // ← セレクトから取得
+      const res = await fetch("/ja/translate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, direction })
+      });
+      const data = await res.json();
+      document.getElementById("translation-result").textContent = data.translated;
+
+      // 言語コードをTTS用に変換
+      const speakLangMap = { "ja":"ja-JP", "en":"en-US", "vi":"vi-VN", "tl":"fil-PH" };
+      const targetLang = direction.split("-")[1]; // 方向から取得
+      const utter = new SpeechSynthesisUtterance(data.translated);
+      utter.lang = speakLangMap[targetLang] || "en-US";
+      utter.volume = 1.0;
+      utter.rate = 1.0;
+      window.speechSynthesis.speak(utter);
+    } catch (err) {
+      alert("翻訳に失敗しました");
+      console.error(err);
+    }
+  });
+}
 
   // === テンプレート開始 ===
   if (templateStartBtn) {
