@@ -114,48 +114,46 @@ document.addEventListener("DOMContentLoaded", () => {
   if (caregiverSend) caregiverSend.addEventListener("click", ()=>{ if (caregiverInput.value.trim()){ appendMessage("caregiver",caregiverInput.value); caregiverInput.value=""; }});
   if (careeSend)     careeSend.addEventListener("click",     ()=>{ if (careeInput.value.trim()){     appendMessage("caree",careeInput.value);     careeInput.value=""; }});
 
-  // === 用語説明 ===
-  if (explainBtn) {
-  explainBtn.addEventListener("click", async () => {
-    const term = document.getElementById("term").value.trim();
-    if (!term) { alert("用語を入力してください"); return; }
+  // === 用語説明（強化版） ===
+  if (explainBtn){
+    explainBtn.addEventListener("click", async ()=>{
+      const term = document.getElementById("term").value.trim();
+      if (!term){ alert("用語を入力してください"); return; }
+      try{
+        const res = await fetch("/ja/explain",{
+          method:"POST",
+          headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({term, maxLength:30})
+        });
+        console.log("[explain] status:", res.status);
+        const data = await res.json();
+        console.log("[explain] json:", data);
 
-    try {
-      const res = await fetch("/ja/explain", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ term, maxLength: 30 })
-      });
+        // 文字列/さまざまなJSONキーにフォールバック
+        let text = "";
+        if (typeof data === "string") {
+          text = data;
+        } else if (data) {
+          text =
+            data.explanation ||
+            data.message ||
+            data.result ||
+            data.summary ||
+            data.text ||
+            (Array.isArray(data.choices) && data.choices[0]?.message?.content) ||
+            "";
+        }
 
-      console.log("[explain] status:", res.status);
-      const data = await res.json();
-      console.log("[explain] json:", data);
+        document.getElementById("explanation").textContent =
+          (text && String(text).trim()) || "(取得できませんでした)";
 
-      // どんな形式でも拾えるフォールバック
-      let text = "";
-      if (typeof data === "string") {
-        text = data;
-      } else if (data) {
-        text =
-          data.explanation ||
-          data.message ||
-          data.result ||
-          data.summary ||
-          data.text ||
-          (Array.isArray(data.choices) && data.choices[0]?.message?.content) ||
-          "";
+        if (text) speak(text,"caregiver");
+      }catch(err){
+        console.error("[explain] error:", err);
+        alert("用語説明に失敗しました");
       }
-
-      document.getElementById("explanation").textContent =
-        (text && String(text).trim()) || "(取得できませんでした)";
-
-      if (text) speak(text, "caregiver");
-    } catch (err) {
-      console.error("[explain] error:", err);
-      alert("用語説明に失敗しました");
-    }
-  });
-}
+    });
+  }
 
   // 翻訳
   if (translateBtn){
@@ -164,9 +162,14 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!text){ alert("先に用語説明を入れてください"); return; }
       try{
         const direction = document.getElementById("translate-direction").value;
-        const res = await fetch("/ja/translate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text, direction})});
+        const res = await fetch("/ja/translate",{
+          method:"POST",
+          headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({text, direction})
+        });
         const data = await res.json();
         document.getElementById("translation-result").textContent = data.translated;
+
         const speakLangMap = {ja:"ja-JP", en:"en-US", vi:"vi-VN", tl:"fil-PH"};
         const targetLang = direction.split("-")[1];
         const u = new SpeechSynthesisUtterance(data.translated);
