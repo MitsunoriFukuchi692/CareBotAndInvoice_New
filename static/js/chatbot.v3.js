@@ -120,11 +120,15 @@ document.addEventListener("DOMContentLoaded", () => {
       const term = document.getElementById("term").value.trim();
       if (!term){ alert("用語を入力してください"); return; }
       try{
-        const res = await fetch("/ja/explain",{
-          method:"POST",
-          headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({term, maxLength:30})
+        const params = new URLSearchParams();
+params.set("term", term);
+params.set("maxLength", "30");
+const res = await fetch("/ja/explain", {
+  method: "POST",
+  headers: {"Content-Type":"application/x-www-form-urlencoded;charset=UTF-8"},
+  body: params.toString()
         });
+
         console.log("[explain] status:", res.status);
         const data = await res.json();
         console.log("[explain] json:", data);
