@@ -123,6 +123,7 @@ document.addEventListener("DOMContentLoaded", () => {
           body: JSON.stringify({ log: logWithTime })
         });
         const data = await res.json();
+       
         if (data.status === "success") {
           alert("会話ログを保存しました。");
         } else {
@@ -178,6 +179,7 @@ document.addEventListener("DOMContentLoaded", () => {
           body: JSON.stringify({ term, maxLength: 30 })
         });
         const data = await res.json();
+        console.log("explain response:", data);
         document.getElementById("explanation").textContent = data.explanation;
         speak(data.explanation, "caregiver");
       } catch (err) {
