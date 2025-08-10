@@ -125,9 +125,8 @@ if (explainBtn){
       fd.append("term", term);
       fd.append("maxLength", "30");
 
-      const res = await fetch("/ja/explain", {
-        method: "POST",
-        body: fd   // Content-Type ヘッダは付けない
+      const url = `/ja/explain?term=${encodeURIComponent(term)}&maxLength=30`;
+const res = await fetch(url, { method: "POST" }); // ボディ不要
       });
       console.log("[explain] status:", res.status);
       const data = await res.json();
