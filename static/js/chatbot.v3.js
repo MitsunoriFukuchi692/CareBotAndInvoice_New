@@ -165,11 +165,39 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // === 用語説明 ===
-  const res = await fetch("/ja/explain", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ term, maxLength: 30 })
-});
+if (explainBtn) {
+  explainBtn.addEventListener("click", async () => {
+    const term = document.getElementById("term").value.trim();
+    if (!term) { alert("用語を入力してください"); return; }
+
+    try {
+      const res = await fetch("/ja/explain", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ term, maxLength: 30 })
+      });
+
+      console.log("[explain] status:", res.status);
+      const data = await res.json();                 // ← ここはJSONで十分
+      console.log("[explain] json:", data);
+
+      const text = data.explanation
+                ?? data.message
+                ?? data.result
+                ?? data.summary
+                ?? "";
+
+      document.getElementById("explanation").textContent =
+        text || "(取得できませんでした)";
+
+      if (text) speak(text, "caregiver");
+    } catch (err) {
+      console.error("[explain] error:", err);
+      alert("用語説明に失敗しました");
+    }
+  });
+}
+
 
 // レスポンス確認ログ
 console.log("[explain] status:", res.status);
