@@ -114,50 +114,48 @@ document.addEventListener("DOMContentLoaded", () => {
   if (caregiverSend) caregiverSend.addEventListener("click", ()=>{ if (caregiverInput.value.trim()){ appendMessage("caregiver",caregiverInput.value); caregiverInput.value=""; }});
   if (careeSend)     careeSend.addEventListener("click",     ()=>{ if (careeInput.value.trim()){     appendMessage("caree",careeInput.value);     careeInput.value=""; }});
 
-  // === 用語説明（definition対応・堅牢） ===
-  if (explainBtn){
-    explainBtn.addEventListener("click", async ()=>{
-      const term = document.getElementById("term").value.trim();
-      if (!term){ alert("用語を入力してください"); return; }
-      try{
-        const params = new URLSearchParams();
-params.set("term", term);
-params.set("maxLength", "30");
-const res = await fetch("/ja/explain", {
-  method: "POST",
-  headers: {"Content-Type":"application/x-www-form-urlencoded;charset=UTF-8"},
-  body: params.toString()
-        });
+  // === 用語説明（FormData 送信） ===
+if (explainBtn){
+  explainBtn.addEventListener("click", async ()=>{
+    const term = document.getElementById("term").value.trim();
+    if (!term){ alert("用語を入力してください"); return; }
+    try{
+      // ← ここを FormData で送る
+      const fd = new FormData();
+      fd.append("term", term);
+      fd.append("maxLength", "30");
 
-        console.log("[explain] status:", res.status);
-        const data = await res.json();
-        console.log("[explain] json:", data);
+      const res = await fetch("/ja/explain", {
+        method: "POST",
+        body: fd   // Content-Type ヘッダは付けない
+      });
+      console.log("[explain] status:", res.status);
+      const data = await res.json();
+      console.log("[explain] json:", data);
 
-        let text = "";
-        if (typeof data === "string") {
-          text = data;
-        } else if (data) {
-          text =
-            data.explanation ||
-            data.definition ||   // ← 追加
-            data.message ||
-            data.result ||
-            data.summary ||
-            data.text ||
-            (Array.isArray(data.choices) && data.choices[0]?.message?.content) ||
-            "";
-        }
-
-        document.getElementById("explanation").textContent =
-          (text && String(text).trim()) || "(取得できませんでした)";
-
-        if (text) speak(text,"caregiver");
-      }catch(err){
-        console.error("[explain] error:", err);
-        alert("用語説明に失敗しました");
+      let text = "";
+      if (typeof data === "string") text = data;
+      else if (data){
+        text =
+          data.explanation ||
+          data.definition ||   // ← サーバが definition を返すため
+          data.message ||
+          data.result ||
+          data.summary ||
+          data.text ||
+          (Array.isArray(data.choices) && data.choices[0]?.message?.content) ||
+          "";
       }
-    });
-  }
+
+      document.getElementById("explanation").textContent =
+        (text && String(text).trim()) || "(取得できませんでした)";
+      if (text) speak(text,"caregiver");
+    }catch(err){
+      console.error("[explain] error:", err);
+      alert("用語説明に失敗しました");
+    }
+  });
+}
 
   // 翻訳
   if (translateBtn){
