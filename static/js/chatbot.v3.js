@@ -144,8 +144,23 @@ document.addEventListener("DOMContentLoaded", () => {
             "";
         }
 
-        document.getElementById("explanation").textContent =
-          (text && String(text).trim()) || "(取得できませんでした)";
+        const raw = await res.text();
+console.log("[explain] raw:", raw);
+let data; try { data = JSON.parse(raw); } catch { data = raw; }
+
+let text = "";
+if (typeof data === "string") {
+  text = data;
+} else if (data) {
+  text = data.explanation || data.message || data.result || data.summary || data.text ||
+         (Array.isArray(data.choices) && data.choices[0]?.message?.content) || "";
+}
+
+// テキストが取れなければ “生の中身” をそのまま表示
+const display = text && String(text).trim()
+  ? text
+  : (typeof data === "object" ? JSON.stringify(data) : String(data || ""));
+document.getElementById("explanation").textContent = display || "(空でした)";
 
         if (text) speak(text,"caregiver");
       }catch(err){
