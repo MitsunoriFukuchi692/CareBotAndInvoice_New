@@ -124,8 +124,11 @@ document.addEventListener("DOMContentLoaded", () => {
         console.log("[explain] status:", res.status);
         const data = await res.json();
         console.log("[explain] json:", data);
-        const text = data.explanation ?? data.message ?? data.result ?? data.summary ?? "";
-        document.getElementById("explanation").textContent = text || "(取得できませんでした)";
+        const text = (data && typeof data === "object") 
+  ? (data.explanation || data.message || data.result || data.summary || "") 
+  : "";
+document.getElementById("explanation").textContent = text.trim() || "(取得できませんでした)";
+
         if (text) speak(text,"caregiver");
       }catch(err){
         console.error("[explain] error:", err);
