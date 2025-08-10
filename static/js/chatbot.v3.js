@@ -136,6 +136,7 @@ document.addEventListener("DOMContentLoaded", () => {
         } else if (data) {
           text =
             data.explanation ||
+            data.definition ||
             data.message ||
             data.result ||
             data.summary ||
