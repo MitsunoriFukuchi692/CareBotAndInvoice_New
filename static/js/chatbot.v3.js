@@ -120,14 +120,12 @@ if (explainBtn){
     const term = document.getElementById("term").value.trim();
     if (!term){ alert("用語を入力してください"); return; }
     try{
-      // ← ここを FormData で送る
-      const fd = new FormData();
-      fd.append("term", term);
-      fd.append("maxLength", "30");
-
-      const url = `/ja/explain?term=${encodeURIComponent(term)}&maxLength=30`;
-const res = await fetch(url, { method: "POST" }); // ボディ不要
+      const res = await fetch('/ja/explain', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+        body: new URLSearchParams({ term, maxLength: 30 })
       });
+
       console.log("[explain] status:", res.status);
       const data = await res.json();
       console.log("[explain] json:", data);
@@ -137,7 +135,7 @@ const res = await fetch(url, { method: "POST" }); // ボディ不要
       else if (data){
         text =
           data.explanation ||
-          data.definition ||   // ← サーバが definition を返すため
+          data.definition ||
           data.message ||
           data.result ||
           data.summary ||
@@ -155,7 +153,6 @@ const res = await fetch(url, { method: "POST" }); // ボディ不要
     }
   });
 }
-
   // 翻訳
   if (translateBtn){
     translateBtn.addEventListener("click", async ()=>{
