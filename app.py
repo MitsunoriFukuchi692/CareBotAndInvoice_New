@@ -16,6 +16,8 @@ import httpx, openai as _o
 # 基本設定
 # --------------------------------
 app = Flask(__name__)
+app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0      # ← これを追加
+app.config["TEMPLATES_AUTO_RELOAD"] = True 
 CORS(app)
 
 # 起動時のバージョン確認ログ（デバッグ用）
