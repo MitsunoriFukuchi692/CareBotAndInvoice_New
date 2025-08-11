@@ -51,7 +51,7 @@
     <h2>2. 撮影画像</h2>
     {% if images %}
       {% for img in images %}
-        <img src="{{ url_for('serve_upload', filename=img) }}" alt="{{ img }}">
+        <img src="{{ url_for('serve_uploads', filename=img) }}" alt="{{ img }}">
       {% endfor %}
     {% else %}
       <p>撮影画像はありません。</p>
@@ -63,7 +63,7 @@
     {% if videos %}
       {% for vid in videos %}
         <video controls>
-          <source src="{{ url_for('serve_upload', filename=vid) }}"
+          <source src="{{ url_for('serve_uploads', filename=vid) }}"
                   type="{{ 'video/mp4' if vid.endswith('.mp4') else 'video/webm' }}">
           お使いのブラウザは動画タグに対応していません。
         </video>
