@@ -85,10 +85,27 @@ def daily_report():
             logging.error(f"要約失敗: {e}")
             text_report = "要約に失敗しました"
 
-    all_media = os.listdir(UPLOAD_DIR)
-    images = [f for f in all_media if f.startswith("image_")]
-    videos = [f for f in all_media if f.startswith("video_")]
-    return render_template("daily_report.html", now=now, text_report=text_report, images=images, videos=videos)
+    # 画像・動画の収集（拡張子ベース、動画は videos/ も見る）
+    img_exts = {".jpg", ".jpeg", ".png"}
+    vid_exts = {".webm", ".mp4", ".mov", ".ogg"}
+
+    def list_media(dir_path, exts):
+        items = []
+        for name in os.listdir(dir_path):
+            p = (dir_path / name)
+            if p.is_file() and p.suffix.lower() in exts:
+                items.append(name)
+        return sorted(items)
+
+    images = list_media(UPLOAD_DIR, img_exts)
+    videos_root = list_media(UPLOAD_DIR, vid_exts)
+    videos_sub  = list_media(VIDEO_DIR, vid_exts)
+
+    # videos/配下はテンプレから相対で参照できるように前置き
+    videos = videos_root + [f"videos/{v}" for v in videos_sub]
+
+    return render_template("daily_report.html", now=now, text_report=text_report,
+                           images=images, videos=videos)
 
 @app.route("/generate_report_pdf", methods=["GET"])
 def generate_report_pdf():
