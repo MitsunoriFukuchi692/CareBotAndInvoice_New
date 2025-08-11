@@ -273,17 +273,20 @@ document.addEventListener("DOMContentLoaded", () => {
       const translated = data.translated || pickText(data) || "";
       $("#translation-result").textContent = translated || "(翻訳できませんでした)";
 
-      // ★ここからサーバーTTS
       const speakLangMap = { ja: "ja-JP", en: "en-US", vi: "vi-VN", tl: "fil-PH" };
       const targetLang = (direction.split("-")[1] || "en").toLowerCase();
-      await speakViaServer(translated, speakLangMap[targetLang] || "en-US");
+      const langCode = speakLangMap[targetLang] || "en-US";
+
+      console.log("[TTS] call /tts", { langCode, text: translated.slice(0,40) + "..." });
+      await speakViaServer(translated, langCode);   // ← 必ず /tts を叩く
     }catch(err){
       console.error("[translate] error:", err);
       alert("翻訳に失敗しました");
     }
   });
 }
-  // 会話ログ保存
+
+       // 会話ログ保存
   if (saveBtn){
     saveBtn.addEventListener("click", saveLog);
   }
