@@ -5,6 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>AIみまくん＋インボイスデモ</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  <style>
+    /* 最低限の体裁（任意） */
+    .chat-title{ text-align:center; margin:1rem 0; }
+    #chat-window{ border:1px solid #ddd; border-radius:8px; min-height:180px; padding:8px; margin:8px 0; }
+    .input-panel{ display:grid; grid-template-columns:1fr auto auto; gap:8px; align-items:center; }
+    .role-label{ grid-column:1 / -1; font-weight:bold; margin-top:8px; }
+    .template-start{ margin:0.5rem auto; display:inline-block; }
+    #template-buttons{ display:flex; flex-wrap:wrap; gap:6px; justify-content:center; margin-bottom:8px; }
+    .action-buttons{ display:flex; gap:8px; justify-content:center; margin-top:12px; }
+  </style>
 </head>
 <body>
   <header>
@@ -18,56 +28,57 @@
   <main>
     <h2 class="chat-title">介護支援ボット</h2>
 
-      <div style="margin: 1rem 0; text-align: center;">
-        <button id="template-start-btn" class="template-start">テンプレート対話開始</button>
-        <div id="template-buttons"></div>
-      </div>
-      <div id="chat-window"></div>
+    <!-- テンプレ会話 -->
+    <div style="margin: 1rem 0; text-align: center;">
+      <button id="template-start-btn" class="template-start">テンプレート対話開始</button>
+      <div id="template-buttons"></div>
+    </div>
 
-      <div class="input-panel">
-        <label class="role-label caregiver" for="caregiver-input">介護士</label>
-        <input id="caregiver-input" type="text" placeholder="介護士の発言を入力">
-        <button id="mic-caregiver" onclick="startRecognition('caregiver-input')">🎤</button>
-        <button id="send-caregiver" onclick="appendMessage('caregiver', caregiverInput.value)">送信</button>
+    <!-- 会話表示 -->
+    <div id="chat-window"></div>
 
-        <label class="role-label caree" for="caree-input">被介護者</label>
-        <input id="caree-input" type="text" placeholder="被介護者の発言を入力">
-        <button id="mic-caree" onclick="startRecognition('caree-input')">🎤</button>
-        <button id="send-caree" onclick="appendMessage('caree', careeInput.value)">送信</button>
-      </div>
+    <!-- 入力エリア（onclick廃止、IDで結線） -->
+    <div class="input-panel">
+      <label class="role-label caregiver" for="caregiver-input">介護士</label>
+      <input id="caregiver-input" type="text" placeholder="介護士の発言を入力" />
+      <button id="mic-caregiver" type="button">🎤</button>
+      <button id="send-caregiver" type="button">送信</button>
 
-      <div class="tts-panel">
-        <label>音量:<input type="range" id="volume-slider" min="0" max="1" step="0.1" value="1"></label>
-        <label>速度:<input type="range" id="rate-slider" min="0.5" max="2" step="0.1" value="1"></label>
-      </div>
+      <label class="role-label caree" for="caree-input">被介護者</label>
+      <input id="caree-input" type="text" placeholder="被介護者の発言を入力" />
+      <button id="mic-caree" type="button">🎤</button>
+      <button id="send-caree" type="button">送信</button>
+    </div>
 
-      <div id="glossary">
-        <input type="text" id="term" placeholder="用語を入力">
-        <button id="explain-btn">説明</button>
-        <p id="explanation"></p>
-      </div>
-
-      <div id="translation-panel">
-        <select id="translate-direction">
-          <option value="ja-en" selected>日本語→英語</option>
-          <option value="en-ja">英語→日本語</option>
-          <option value="ja-vi">日本語→ベトナム語</option>
-          <option value="vi-ja">ベトナム語→日本語</option>
-          <option value="ja-tl">日本語→タガログ語</option>
-          <option value="tl-ja">タガログ語→日本語</option>
-
-        </select>
-        <button id="translate-btn">翻訳</button>
-        <p id="translation-result"></p>
-      </div>
-
-      <div class="action-buttons">
-        <button id="save-log-btn">会話ログ保存</button>
-        <button id="daily-report-btn" onclick="window.open('/daily_report','_blank')">📝 日報を生成</button>
-      </div>
+    <!-- 用語説明 -->
+    <section id="glossary" style="margin-top:16px;">
+      <input type="text" id="term" placeholder="用語を入力" />
+      <button id="explain-btn" type="button">説明</button>
+      <p id="explanation"></p>
     </section>
+
+    <!-- 翻訳（サーバーTTSで読み上げ） -->
+    <section id="translation-panel">
+      <select id="translate-direction">
+        <option value="ja-en" selected>日本語→英語</option>
+        <option value="en-ja">英語→日本語</option>
+        <option value="ja-vi">日本語→ベトナム語</option>
+        <option value="vi-ja">ベトナム語→日本語</option>
+        <option value="ja-tl">日本語→タガログ語</option>
+        <option value="tl-ja">タガログ語→日本語</option>
+      </select>
+      <button id="translate-btn" type="button">翻訳して読み上げ</button>
+      <p id="translation-result"></p>
+    </section>
+
+    <!-- アクション -->
+    <div class="action-buttons">
+      <button id="save-log-btn" type="button">会話ログ保存</button>
+      <a class="btn" href="/daily_report" target="_blank" rel="noopener">📝 日報を生成</a>
+    </div>
   </main>
 
-  <script src="{{ url_for('static', filename='js/chatbot.v3.js') }}"></script>
+  <!-- 最新JSを必ず読むためにクエリでキャッシュ無効化 -->
+  <script src="{{ url_for('static', filename='js/chatbot.v3.js') }}?v=20250811d"></script>
 </body>
 </html>
