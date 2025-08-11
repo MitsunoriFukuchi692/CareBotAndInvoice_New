@@ -1,9 +1,20 @@
-console.log("✅ chatbot.v3.js 読み込みOK");
+// === chatbot.v3.js (server TTS版) ===
+console.log("[chatbot.v3.js] v=20250811g");
 
-// サーバーTTSで再生（Google Cloud TTS -> mp3）
+// --- iOS 無音対策（初回タップでオーディオ解錠＆単一Audioで再生） ---
+let __audioUnlocked = false;
+window.addEventListener('touchstart', () => {
+  if (__audioUnlocked) return;
+  const a = new Audio(); a.muted = true;
+  a.play().catch(()=>{}).finally(()=>{ __audioUnlocked = true; });
+}, { once: true });
+const __ttsAudio = new Audio();
+
+// --- サーバーTTS（/tts -> mp3） ---
 async function speakViaServer(text, langCode){
   if (!text) return;
   try{
+    console.log("[TTS] /tts", { langCode, sample: text.slice(0,30) });
     const res = await fetch("/tts", {
       method: "POST",
       headers: {"Content-Type":"application/json"},
@@ -12,8 +23,10 @@ async function speakViaServer(text, langCode){
     if (!res.ok) throw new Error("TTS failed");
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
-    const audio = new Audio(url);
-    await audio.play();
+    __ttsAudio.src = url;
+    __ttsAudio.muted = false;
+    await __ttsAudio.play();
+    URL.revokeObjectURL(url);
   }catch(e){
     console.error("[speakViaServer] error:", e);
     alert("音声再生に失敗しました。");
@@ -23,51 +36,26 @@ async function speakViaServer(text, langCode){
 // ===== ユーティリティ =====
 const $ = (sel) => document.querySelector(sel);
 
-// サーバ応答からテキストを安全に取り出す（多様な形を許容）
+// サーバ応答からテキストを安全に取り出す
 function pickText(data){
   if (!data) return "";
   if (typeof data === "string") return data;
   return (
-    data.text ||
-    data.explanation ||
-    data.definition ||
-    data.summary ||
-    data.message ||
-    data.result ||
-    (Array.isArray(data.choices) && data.choices[0]?.message?.content) ||
-    ""
+    data.text || data.explanation || data.definition || data.summary ||
+    data.message || data.result ||
+    (Array.isArray(data.choices) && data.choices[0]?.message?.content) || ""
   );
 }
 
-// ===== サーバーTTS呼び出し =====
-async function speak(text, role) {
+// ===== 画面メッセージ（日本語だけはブラウザTTSで軽量化） =====
+function speak(text, role){
   if (!text) return;
-
-  try {
-    const res = await fetch('/tts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        text: text,
-        lang: role === "translation" ? "vi-VN" : "ja-JP" // ここで現地語コードを指定
-      })
-    });
-
-    if (!res.ok) throw new Error("TTSサーバーエラー");
-
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-
-    const audio = new Audio(url);
-    audio.volume = 1.0; // 音量調整
-    await audio.play();
-
-  } catch (err) {
-    console.error("TTSエラー:", err);
-  }
+  const u = new SpeechSynthesisUtterance(text);
+  u.volume = 1.0; u.rate = 1.0;
+  u.lang = "ja-JP";
+  window.speechSynthesis.cancel();
+  window.speechSynthesis.speak(u);
 }
-
-// ===== 画面メッセージ =====
 function appendMessage(role, text){
   const chatWindow = $("#chat-window");
   const div = document.createElement("div");
@@ -77,7 +65,7 @@ function appendMessage(role, text){
   div.textContent = (role === "caregiver" ? "介護士: " : role === "caree" ? "被介護者: " : "") + text;
   chatWindow.appendChild(div);
   chatWindow.scrollTop = chatWindow.scrollHeight;
-  speak(text, role);
+  speak(text, role); // 日本語
 }
 
 // ===== テンプレ会話 =====
@@ -95,7 +83,6 @@ const careeResponses = {
   "睡眠": ["よく眠れました","途中で目が覚めました","眠気があります","眠れませんでした"],
   "排便": ["普通でした","少し便秘気味です","下痢でした","昨日ありました"]
 };
-
 function showTemplates(role, category = null){
   const templateContainer = $("#template-buttons");
   templateContainer.innerHTML = "";
@@ -141,9 +128,8 @@ function setupMic(btn, input){
   });
 }
 
-// ===== 用語説明：前と同じ形式（まずJSON、だめならフォーム） =====
+// ===== 用語説明 =====
 async function fetchExplain(term){
-  // まずは JSON で送信（以前の実装で通る想定）
   try{
     const res = await fetch("/ja/explain", {
       method: "POST",
@@ -155,9 +141,7 @@ async function fetchExplain(term){
       const text = pickText(data);
       if (text) return text;
     }
-  }catch(e){ console.debug("explain(JSON) failed -> fallback", e); }
-
-  // フォーム送信にフォールバック（サーバが form を読む場合）
+  }catch(e){}
   try{
     const res = await fetch("/ja/explain", {
       method: "POST",
@@ -169,9 +153,7 @@ async function fetchExplain(term){
       const text = pickText(data);
       if (text) return text;
     }
-  }catch(e){ console.debug("explain(form) failed -> fallback2", e); }
-
-  // 最後の保険：GETクエリで投げる
+  }catch(e){}
   try{
     const url = `/ja/explain?term=${encodeURIComponent(term)}&maxLength=30`;
     const res = await fetch(url, { method: "GET" });
@@ -180,8 +162,7 @@ async function fetchExplain(term){
       const text = pickText(data);
       if (text) return text;
     }
-  }catch(e){ console.debug("explain(GET) failed", e); }
-
+  }catch(e){}
   return "";
 }
 
@@ -198,7 +179,7 @@ async function fetchTranslate(text, direction){
 // ===== 会話ログ保存 =====
 async function saveLog(){
   const chatWindow = $("#chat-window");
-  const log = chatWindow.innerText.trim();
+  const log = chatWindow?.innerText?.trim();
   if (!log){ alert("会話がありません"); return; }
   const ts = new Date().toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" });
   const logWithTime = `[${ts}]\n${log}`;
@@ -219,7 +200,6 @@ document.addEventListener("DOMContentLoaded", () => {
   console.log("👉 スクリプト開始");
 
   // 要素
-  const chatWindow = $("#chat-window");
   const caregiverInput = $("#caregiver-input");
   const careeInput = $("#caree-input");
   const caregiverSend = $("#send-caregiver");
@@ -228,43 +208,45 @@ document.addEventListener("DOMContentLoaded", () => {
   const translateBtn = $("#translate-btn");
   const saveBtn = $("#save-log-btn");
   const templateStartBtn = $("#template-start-btn");
-  const templateContainer = $("#template-buttons");
   const caregiverMic = $("#mic-caregiver");
   const careeMic = $("#mic-caree");
 
   // 送信ボタン
-  if (caregiverSend) caregiverSend.addEventListener("click", () => { const v = caregiverInput?.value?.trim(); if (v){ appendMessage("caregiver", v); caregiverInput.value = ""; }});
-  if (careeSend)     careeSend.addEventListener("click",     () => { const v = careeInput?.value?.trim();     if (v){ appendMessage("caree",     v); careeInput.value     = ""; }});
+  caregiverSend?.addEventListener("click", () => {
+    const v = caregiverInput?.value?.trim();
+    if (v){ appendMessage("caregiver", v); caregiverInput.value = ""; }
+  });
+  careeSend?.addEventListener("click", () => {
+    const v = careeInput?.value?.trim();
+    if (v){ appendMessage("caree", v); careeInput.value = ""; }
+  });
 
   // マイク
   setupMic(caregiverMic, caregiverInput);
   setupMic(careeMic, careeInput);
 
-  // 用語説明（前の形式で復活 + フォールバック）
-  if (explainBtn){
-    explainBtn.addEventListener("click", async () => {
-      const termInput = $("#term");
-      const out = $("#explanation");
-      const term = termInput?.value?.trim();
-      if (!term){ alert("用語を入力してください"); return; }
-      explainBtn.disabled = true;
-      out.textContent = "";
-      try{
-        const text = await fetchExplain(term);
-        out.textContent = (text && String(text).trim()) || "(取得できませんでした)";
-        if (text) speak(text, "caregiver");
-      }catch(err){
-        console.error("[explain] error:", err);
-        alert("用語説明に失敗しました");
-      }finally{
-        explainBtn.disabled = false;
-      }
-    });
-  }
+  // 用語説明
+  explainBtn?.addEventListener("click", async () => {
+    const termInput = $("#term");
+    const out = $("#explanation");
+    const term = termInput?.value?.trim();
+    if (!term){ alert("用語を入力してください"); return; }
+    explainBtn.disabled = true;
+    out.textContent = "";
+    try{
+      const text = await fetchExplain(term);
+      out.textContent = (text && String(text).trim()) || "(取得できませんでした)";
+      if (text) speak(text, "caregiver"); // 日本語読み上げ
+    }catch(err){
+      console.error("[explain] error:", err);
+      alert("用語説明に失敗しました");
+    }finally{
+      explainBtn.disabled = false;
+    }
+  });
 
-  // 翻訳
- if (translateBtn){
-  translateBtn.addEventListener("click", async () => {
+  // 翻訳（読み上げはサーバーTTS）
+  translateBtn?.addEventListener("click", async () => {
     const src = $("#explanation")?.textContent?.trim();
     if (!src){ alert("先に用語説明を入れてください"); return; }
     const direction = $("#translate-direction")?.value || "ja-en";
@@ -276,28 +258,21 @@ document.addEventListener("DOMContentLoaded", () => {
       const speakLangMap = { ja: "ja-JP", en: "en-US", vi: "vi-VN", tl: "fil-PH" };
       const targetLang = (direction.split("-")[1] || "en").toLowerCase();
       const langCode = speakLangMap[targetLang] || "en-US";
-
-      console.log("[TTS] call /tts", { langCode, text: translated.slice(0,40) + "..." });
-      await speakViaServer(translated, langCode);   // ← 必ず /tts を叩く
+      await speakViaServer(translated, langCode);
     }catch(err){
       console.error("[translate] error:", err);
       alert("翻訳に失敗しました");
     }
   });
-}
 
-       // 会話ログ保存
-  if (saveBtn){
-    saveBtn.addEventListener("click", saveLog);
-  }
+  // 会話ログ保存
+  saveBtn?.addEventListener("click", saveLog);
 
   // テンプレ開始
-  if (templateStartBtn){
-    templateStartBtn.addEventListener("click", () => {
-      templateStartBtn.style.display = "none";
-      showTemplates("caregiver");
-    });
-  }
+  templateStartBtn?.addEventListener("click", () => {
+    templateStartBtn.style.display = "none";
+    showTemplates("caregiver");
+  });
 });
 
 // ====== 録画 → サーバー保存 → 再生（PC安定版） ======
@@ -311,7 +286,6 @@ async function startRecording() {
   const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
     ? "video/webm;codecs=vp9"
     : (MediaRecorder.isTypeSupported("video/webm;codecs=vp8") ? "video/webm;codecs=vp8" : "video/webm");
-
   mediaRecorder = new MediaRecorder(stream, { mimeType });
   mediaRecorder.ondataavailable = (e) => { if (e.data && e.data.size > 0) recordedChunks.push(e.data); };
   mediaRecorder.start();
@@ -326,9 +300,7 @@ async function stopAndSaveRecording() {
       try {
         const url = await uploadRecordedBlob(blob);
         resolve(url);
-      } catch (e) {
-        reject(e);
-      }
+      } catch (e) { reject(e); }
     };
     mediaRecorder.stop();
   });
@@ -338,33 +310,23 @@ async function stopAndSaveRecording() {
 async function uploadRecordedBlob(blob) {
   const fd = new FormData();
   fd.append("video", blob, "recording.webm");
-
   const res = await fetch("/upload_video", { method: "POST", body: fd });
   const data = await res.json();
-  if (!res.ok || !data.ok) {
-    console.error("Upload failed:", data);
-    throw new Error(data.error || "upload-failed");
-  }
-
-  // 返ってきたURLをvideoタグに反映
+  if (!res.ok || !data.ok) { console.error("Upload failed:", data); throw new Error(data.error || "upload-failed"); }
   const player = document.getElementById("savedVideo");
   if (player) {
-    player.src = data.url;              // 例: /static/uploads/videos/xxxx.webm
+    player.src = data.url;
     player.load();
     try { await player.play(); } catch (_) {}
   }
   return data.url;
 }
 
-// ====== 任意：ボタン結線（存在する場合のみ有効） ======
+// 任意：ボタン結線（存在する場合のみ）
 document.getElementById("startRecordBtn")?.addEventListener("click", () => {
   startRecording().catch(err => alert("録画開始失敗: " + err));
 });
 document.getElementById("stopSaveBtn")?.addEventListener("click", async () => {
-  try {
-    await stopAndSaveRecording();
-    alert("保存しました");
-  } catch (e) {
-    alert("保存失敗: " + e.message);
-  }
+  try { await stopAndSaveRecording(); alert("保存しました"); }
+  catch (e) { alert("保存失敗: " + e.message); }
 });
