@@ -65,14 +65,31 @@ def camera_test():
 # --------------------------------
 # 日報関連（任意：使っている場合）
 # --------------------------------
+
+def _safe_list_media(dir_path: Path, exts: set[str]) -> list[str]:
+    items = []
+    try:
+        p = Path(dir_path)
+        if not p.exists():
+            return items
+        for child in p.iterdir():
+            if child.is_file() and child.suffix.lower() in exts:
+                items.append(child.name)  # ここは「名前のみ」を返す
+    except Exception as e:
+        logging.warning(f"list_media error at {dir_path}: {e}")
+    return sorted(items)
+
+# === /daily_report を丸ごと置換 ===
 @app.route("/daily_report", methods=["GET"])
 def daily_report():
     now = (datetime.utcnow() + timedelta(hours=9)).strftime("%Y-%m-%d %H:%M")
-    files = sorted(glob.glob(str(LOG_DIR / "log_*.txt")))
+
+    # 会話要約（失敗しても続行）
     text_report = "ログがありません"
-    if files:
-        content = open(files[-1], encoding="utf-8").read()
-        try:
+    try:
+        files = sorted(glob.glob(str(LOG_DIR / "log_*.txt")))
+        if files:
+            content = open(files[-1], encoding="utf-8").read()
             resp = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
@@ -81,30 +98,23 @@ def daily_report():
                 ]
             )
             text_report = resp.choices[0].message.content.strip()
-        except Exception as e:
-            logging.error(f"要約失敗: {e}")
-            text_report = "要約に失敗しました"
+    except Exception as e:
+        logging.error(f"要約失敗: {e}")
+        text_report = "要約に失敗しました"
 
-    # 画像・動画の収集（拡張子ベース、動画は videos/ も見る）
+    # 画像・動画を拡張子ベースで収集（videos/配下も見る）
     img_exts = {".jpg", ".jpeg", ".png"}
     vid_exts = {".webm", ".mp4", ".mov", ".ogg"}
 
-    def list_media(dir_path, exts):
-        items = []
-        for name in os.listdir(dir_path):
-            p = (dir_path / name)
-            if p.is_file() and p.suffix.lower() in exts:
-                items.append(name)
-        return sorted(items)
+    images = _safe_list_media(UPLOAD_DIR, img_exts)
+    videos_root = _safe_list_media(UPLOAD_DIR, vid_exts)
+    videos_sub  = _safe_list_media(VIDEO_DIR, vid_exts)
 
-    images = list_media(UPLOAD_DIR, img_exts)
-    videos_root = list_media(UPLOAD_DIR, vid_exts)
-    videos_sub  = list_media(VIDEO_DIR, vid_exts)
+    # テンプレ側が `url_for('static', filename='uploads/' + path)` で読む想定
+    videos = videos_root + [f"videos/{name}" for name in videos_sub]
 
-    # videos/配下はテンプレから相対で参照できるように前置き
-    videos = videos_root + [f"videos/{v}" for v in videos_sub]
-
-    return render_template("daily_report.html", now=now, text_report=text_report,
+    return render_template("daily_report.html",
+                           now=now, text_report=text_report,
                            images=images, videos=videos)
 
 @app.route("/generate_report_pdf", methods=["GET"])
