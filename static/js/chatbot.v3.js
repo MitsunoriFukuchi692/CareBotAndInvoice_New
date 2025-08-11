@@ -261,3 +261,72 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 });
+
+// ====== 録画 → サーバー保存 → 再生（PC安定版） ======
+let mediaRecorder = null;
+let recordedChunks = [];
+
+// 録画開始
+async function startRecording() {
+  recordedChunks = [];
+  const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+  const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
+    ? "video/webm;codecs=vp9"
+    : (MediaRecorder.isTypeSupported("video/webm;codecs=vp8") ? "video/webm;codecs=vp8" : "video/webm");
+
+  mediaRecorder = new MediaRecorder(stream, { mimeType });
+  mediaRecorder.ondataavailable = (e) => { if (e.data && e.data.size > 0) recordedChunks.push(e.data); };
+  mediaRecorder.start();
+}
+
+// 録画停止 → アップロード
+async function stopAndSaveRecording() {
+  return new Promise((resolve, reject) => {
+    if (!mediaRecorder) return reject("not recording");
+    mediaRecorder.onstop = async () => {
+      const blob = new Blob(recordedChunks, { type: "video/webm" });
+      try {
+        const url = await uploadRecordedBlob(blob);
+        resolve(url);
+      } catch (e) {
+        reject(e);
+      }
+    };
+    mediaRecorder.stop();
+  });
+}
+
+// サーバーに送信（/upload_video, フィールド名は "video"）
+async function uploadRecordedBlob(blob) {
+  const fd = new FormData();
+  fd.append("video", blob, "recording.webm");
+
+  const res = await fetch("/upload_video", { method: "POST", body: fd });
+  const data = await res.json();
+  if (!res.ok || !data.ok) {
+    console.error("Upload failed:", data);
+    throw new Error(data.error || "upload-failed");
+  }
+
+  // 返ってきたURLをvideoタグに反映
+  const player = document.getElementById("savedVideo");
+  if (player) {
+    player.src = data.url;              // 例: /static/uploads/videos/xxxx.webm
+    player.load();
+    try { await player.play(); } catch (_) {}
+  }
+  return data.url;
+}
+
+// ====== 任意：ボタン結線（存在する場合のみ有効） ======
+document.getElementById("startRecordBtn")?.addEventListener("click", () => {
+  startRecording().catch(err => alert("録画開始失敗: " + err));
+});
+document.getElementById("stopSaveBtn")?.addEventListener("click", async () => {
+  try {
+    await stopAndSaveRecording();
+    alert("保存しました");
+  } catch (e) {
+    alert("保存失敗: " + e.message);
+  }
+});

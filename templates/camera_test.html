@@ -32,31 +32,27 @@
 <body>
   <h1>カメラ実験ページ</h1>
 
-<!-- プレビュー -->
-<video id="preview" autoplay playsinline></video>
+  <!-- プレビュー -->
+  <video id="preview" autoplay playsinline></video>
 
-<!-- カメラ切替 -->
-<div>
-  <button id="front-btn">前面カメラ</button>
-  <button id="back-btn">背面カメラ</button>
-</div>
+  <!-- カメラ切替 -->
+  <div>
+    <button id="front-btn">前面カメラ</button>
+    <button id="back-btn">背面カメラ</button>
+  </div>
 
-  <!-- 録画コントロール -->
-  <button id="record-video-btn">8秒間 動画撮影</button>
-  <video id="recorded-video" controls></video>
+  <!-- 録画コントロール（chatbot.v3.js に合わせたID） -->
+  <div>
+    <button id="startRecordBtn">録画開始</button>
+    <button id="stopSaveBtn">録画停止＆保存</button>
+  </div>
 
-<!-- 録画 -->
-<button id="record-video-btn">8秒間 動画撮影</button>
-<video id="recorded-video" controls></video>
+  <!-- 保存動画の再生 -->
+  <video id="savedVideo" controls playsinline></video>
 
-<!-- 写真 -->
-<button id="take-photo-btn">写真を撮る</button>
-<canvas id="photo-canvas" width="320" height="240"></canvas>
-
-<!-- 保存 -->
-<button id="upload-btn">保存＆アップロード</button>
-
-<script src="{{ url_for('static', filename='js/camera.js') }}?v=3"></script>
+  <!-- 写真撮影 -->
+  <button id="take-photo-btn">写真を撮る</button>
+  <canvas id="photo-canvas" width="320" height="240"></canvas>
 
   <script>
     const video = document.getElementById("preview");
@@ -83,6 +79,7 @@
     startCamera("environment");
   </script>
 
-  <script src="{{ url_for('static', filename='js/camera.js') }}"></script>
+  <!-- 録画処理は chatbot.v3.js 側を使用 -->
+  <script src="{{ url_for('static', filename='js/chatbot.v3.js') }}"></script>
 </body>
 </html>

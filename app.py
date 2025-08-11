@@ -1,15 +1,16 @@
-import os, glob, logging, tempfile, sys
+import os, glob, logging, tempfile, sys, mimetypes, uuid
 from datetime import datetime, timedelta
 from pathlib import Path
 from io import BytesIO
 
-from flask import Flask, render_template, request, jsonify, send_from_directory, send_file
+from flask import Flask, render_template, request, jsonify, send_from_directory, send_file, url_for
 from flask_cors import CORS
 from google.cloud import texttospeech
 from openai import OpenAI
 import stripe
 from fpdf import FPDF
 from PIL import Image
+import httpx, openai as _o
 
 # --------------------------------
 # 基本設定
@@ -18,7 +19,6 @@ app = Flask(__name__)
 CORS(app)
 
 # 起動時のバージョン確認ログ（デバッグ用）
-import httpx, openai as _o
 logging.basicConfig(level=logging.INFO)
 logging.info(f"[BOOT] Python={sys.version}")
 logging.info(f"[BOOT] httpx={httpx.__version__}")
@@ -32,9 +32,15 @@ stripe.api_key = os.getenv("STRIPE_SECRET_KEY", "")
 # 保存先（統一）
 BASE_DIR = Path(__file__).resolve().parent
 UPLOAD_DIR = BASE_DIR / "static" / "uploads"
+VIDEO_DIR = UPLOAD_DIR / "videos"
 LOG_DIR = BASE_DIR / "logs"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+VIDEO_DIR.mkdir(parents=True, exist_ok=True)
 LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+# アップロード制限
+app.config["MAX_CONTENT_LENGTH"] = 100 * 1024 * 1024  # 100MB
+ALLOWED_VIDEO_EXTS = {".webm", ".mp4", ".ogg", ".mov"}
 
 # キャッシュ抑止
 @app.after_request
@@ -122,7 +128,6 @@ def generate_report_pdf():
     if images:
         latest_img = str(UPLOAD_DIR / sorted(images)[-1])
         try:
-            import tempfile
             img = Image.open(latest_img).convert("RGB")
             w, h = img.size
             max_h = 150  # mm
@@ -170,7 +175,6 @@ def photo_to_pdf():
         if not f:
             return jsonify({"ok": False, "error": "no photo"}), 400
 
-        # 画像→RGB→一時JPG（fpdfはパス指定が最も安定）
         img = Image.open(f.stream).convert("RGB")
         with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
             tmp_path = tmp.name
@@ -194,7 +198,55 @@ def photo_to_pdf():
         return jsonify({"ok": False, "error": "pdf-failed"}), 500
 
 # --------------------------------
-# メディアのアップロード（画像/動画）
+# 動画アップロード（専用）
+# --------------------------------
+def _ext_from(mimetype_str, fallback=".webm"):
+    ext = mimetypes.guess_extension(mimetype_str or "") or fallback
+    return ext.lower()
+
+def _is_allowed_ext(ext):
+    return ext.lower() in ALLOWED_VIDEO_EXTS
+
+def _cleanup_old_videos(keep=1):
+    files = sorted((p for p in VIDEO_DIR.iterdir() if p.is_file()),
+                   key=lambda p: p.stat().st_mtime,
+                   reverse=True)
+    for p in files[keep:]:
+        try:
+            p.unlink()
+        except Exception:
+            pass
+
+@app.route("/upload_video", methods=["POST"])
+def upload_video():
+    if "video" not in request.files:
+        return jsonify({"ok": False, "error": "no-file-field"}), 400
+
+    f = request.files["video"]
+    if not f or f.filename.strip() == "":
+        return jsonify({"ok": False, "error": "empty-file"}), 400
+
+    # 拡張子判定（filename優先→無ければmimetype）
+    name_ext = os.path.splitext(f.filename)[1].lower()
+    if not name_ext or not _is_allowed_ext(name_ext):
+        name_ext = _ext_from(getattr(f, "mimetype", None), fallback=".webm")
+    if not _is_allowed_ext(name_ext):
+        return jsonify({"ok": False, "error": "unsupported-ext"}), 400
+
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    fname = f"{stamp}-{uuid.uuid4().hex}{name_ext}"
+    save_path = VIDEO_DIR / fname
+    f.save(save_path)
+
+    # 古い動画は削除（最新のみ保持）
+    _cleanup_old_videos(keep=1)
+
+    # 即再生用URL
+    url = url_for("static", filename=f"uploads/videos/{fname}")
+    return jsonify({"ok": True, "url": url, "filename": fname}), 200
+
+# --------------------------------
+# 既存：メディアのアップロード（画像/動画 共通API）
 # --------------------------------
 @app.route("/upload_media", methods=["POST"])
 def upload_media():
@@ -215,7 +267,7 @@ def upload_media():
         for f in os.listdir(UPLOAD_DIR):
             if f.startswith("video_"):
                 try:
-                    os.remove(UPLOAD_DIR / f)
+                    (UPLOAD_DIR / f).unlink()
                 except Exception as e:
                     logging.warning(f"古い動画削除失敗: {f}, {e}")
 
@@ -242,7 +294,6 @@ def upload_media():
 def explain_term():
     try:
         data = request.get_json(silent=True) or {}
-        # term / word を、args・form・json どれでも受ける
         term = (
             request.args.get("term")
             or request.form.get("term")
@@ -276,13 +327,13 @@ def explain_term():
             logging.warning(f"OpenAI失敗: {inner}")
             text = f"{term}: かんたんな説明です"
 
-        # 両方のキーで返す（フロントのどちらにも対応）
         return jsonify({"explanation": text, "definition": text}), 200
 
     except Exception as e:
         logging.exception(f"/ja/explain error: {e}")
         msg = "説明に失敗しました"
         return jsonify({"explanation": msg, "definition": msg}), 200
+
 # --------------------------------
 # 翻訳（既存利用中なら）
 # --------------------------------
