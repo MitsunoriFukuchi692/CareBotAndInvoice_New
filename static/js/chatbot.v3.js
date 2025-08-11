@@ -1,5 +1,25 @@
 console.log("✅ chatbot.v3.js 読み込みOK");
 
+// サーバーTTSで再生（Google Cloud TTS -> mp3）
+async function speakViaServer(text, langCode){
+  if (!text) return;
+  try{
+    const res = await fetch("/tts", {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({ text, lang: langCode })
+    });
+    if (!res.ok) throw new Error("TTS failed");
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    await audio.play();
+  }catch(e){
+    console.error("[speakViaServer] error:", e);
+    alert("音声再生に失敗しました。");
+  }
+}
+
 // ===== ユーティリティ =====
 const $ = (sel) => document.querySelector(sel);
 
@@ -19,15 +39,32 @@ function pickText(data){
   );
 }
 
-// ===== 音声合成 =====
-function speak(text, role){
+// ===== サーバーTTS呼び出し =====
+async function speak(text, role) {
   if (!text) return;
-  const u = new SpeechSynthesisUtterance(text);
-  u.volume = 1.0; u.rate = 1.0;
-  // 役割でざっくり言語を切替（必要に応じて拡張）
-  if (role === "translation") u.lang = "en-US"; else u.lang = "ja-JP";
-  window.speechSynthesis.cancel();
-  window.speechSynthesis.speak(u);
+
+  try {
+    const res = await fetch('/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text: text,
+        lang: role === "translation" ? "vi-VN" : "ja-JP" // ここで現地語コードを指定
+      })
+    });
+
+    if (!res.ok) throw new Error("TTSサーバーエラー");
+
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+
+    const audio = new Audio(url);
+    audio.volume = 1.0; // 音量調整
+    await audio.play();
+
+  } catch (err) {
+    console.error("TTSエラー:", err);
+  }
 }
 
 // ===== 画面メッセージ =====
@@ -226,28 +263,26 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // 翻訳
-  if (translateBtn){
-    translateBtn.addEventListener("click", async () => {
-      const src = $("#explanation")?.textContent?.trim();
-      if (!src){ alert("先に用語説明を入れてください"); return; }
-      const direction = $("#translate-direction")?.value || "ja-en";
-      try{
-        const data = await fetchTranslate(src, direction);
-        const translated = data.translated || pickText(data) || "";
-        $("#translation-result").textContent = translated || "(翻訳できませんでした)";
-        const speakLangMap = { ja: "ja-JP", en: "en-US", vi: "vi-VN", tl: "fil-PH" };
-        const targetLang = direction.split("-")[1] || "en";
-        const u = new SpeechSynthesisUtterance(translated);
-        u.lang = speakLangMap[targetLang] || "en-US";
-        u.volume = 1.0; u.rate = 1.0;
-        window.speechSynthesis.speak(u);
-      }catch(err){
-        console.error("[translate] error:", err);
-        alert("翻訳に失敗しました");
-      }
-    });
-  }
+ if (translateBtn){
+  translateBtn.addEventListener("click", async () => {
+    const src = $("#explanation")?.textContent?.trim();
+    if (!src){ alert("先に用語説明を入れてください"); return; }
+    const direction = $("#translate-direction")?.value || "ja-en";
+    try{
+      const data = await fetchTranslate(src, direction);
+      const translated = data.translated || pickText(data) || "";
+      $("#translation-result").textContent = translated || "(翻訳できませんでした)";
 
+      // ★ここからサーバーTTS
+      const speakLangMap = { ja: "ja-JP", en: "en-US", vi: "vi-VN", tl: "fil-PH" };
+      const targetLang = (direction.split("-")[1] || "en").toLowerCase();
+      await speakViaServer(translated, speakLangMap[targetLang] || "en-US");
+    }catch(err){
+      console.error("[translate] error:", err);
+      alert("翻訳に失敗しました");
+    }
+  });
+}
   // 会話ログ保存
   if (saveBtn){
     saveBtn.addEventListener("click", saveLog);

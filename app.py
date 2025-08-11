@@ -409,17 +409,34 @@ def translate_text():
 def tts():
     try:
         data = request.get_json(force=True)
-        text = data.get("text", "")
-        lang = data.get("lang", "ja-JP")
-        voice_name = data.get("voice", "")
+        text = (data.get("text") or "").strip()
+        # 入力例: "vi", "vi-VN", "tl", "fil-PH", "ja-JP", "en-US"
+        req_lang = (data.get("lang") or "ja-JP").strip()
+
         if not text:
             return jsonify({"error": "読み上げるテキストがありません"}), 400
 
+        # 言語コードを正規化
+        lang_map = {
+            "ja": "ja-JP",
+            "en": "en-US",
+            "vi": "vi-VN",
+            "tl": "fil-PH",   # タガログ
+            "fil": "fil-PH",
+        }
+        norm_lang = lang_map.get(req_lang.lower(), req_lang)
+
+        # 声は任意（未指定でOK）
+        voice_name = (data.get("voice") or "").strip() or None
+
         client_tts = texttospeech.TextToSpeechClient()
         synthesis_input = texttospeech.SynthesisInput(text=text)
-        voice = texttospeech.VoiceSelectionParams(language_code=lang, name=voice_name or None)
+        voice = texttospeech.VoiceSelectionParams(language_code=norm_lang, name=voice_name)
         audio_config = texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.MP3)
-        response = client_tts.synthesize_speech(input=synthesis_input, voice=voice, audio_config=audio_config)
+
+        response = client_tts.synthesize_speech(
+            input=synthesis_input, voice=voice, audio_config=audio_config
+        )
         return (response.audio_content, 200, {"Content-Type": "audio/mpeg"})
     except Exception as e:
         logging.error(f"TTSエラー: {e}")
