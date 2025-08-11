@@ -448,8 +448,22 @@ def test_pdf():
         "Content-Disposition": "attachment; filename=test.pdf"
     })
 
-# --------------------------------
-# メイン
+@app.route("/ja/save_log", methods=["POST"])
+def save_log():
+    data = request.get_json(silent=True) or {}
+    log_text = (data.get("log") or "").strip()
+    if not log_text:
+        return jsonify({"ok": False, "error": "empty-log"}), 400
+    ts = (datetime.utcnow() + timedelta(hours=9)).strftime("%Y%m%d_%H%M%S")
+    path = LOG_DIR / f"log_{ts}.txt"
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(log_text)
+        return jsonify({"ok": True, "status": "success"})
+    except Exception as e:
+        logging.error(f"save_log error: {e}")
+        return jsonify({"ok": False, "error": "write-failed"}), 500
+
 # --------------------------------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
