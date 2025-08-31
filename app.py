@@ -16,8 +16,8 @@ import httpx, openai as _o
 # 基本設定
 # --------------------------------
 app = Flask(__name__)
-app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0      # ← これを追加
-app.config["TEMPLATES_AUTO_RELOAD"] = True 
+app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
+app.config["TEMPLATES_AUTO_RELOAD"] = True
 CORS(app)
 
 # 起動時のバージョン確認ログ（デバッグ用）
@@ -25,6 +25,38 @@ logging.basicConfig(level=logging.INFO)
 logging.info(f"[BOOT] Python={sys.version}")
 logging.info(f"[BOOT] httpx={httpx.__version__}")
 logging.info(f"[BOOT] openai={_o.__version__}")
+
+# ---- Version info（追加） ----
+STARTED_AT = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+VERSION_INFO = {
+    "service": os.getenv("SERVICE_NAME", "carebotandinvoice-v2"),
+    "git": (os.getenv("GIT_SHA") or os.getenv("RENDER_GIT_COMMIT", ""))[:7],
+    "built": os.getenv("BUILD_TIME", STARTED_AT),
+    "env": os.getenv("RENDER_SERVICE_NAME", ""),
+}
+
+@app.context_processor
+def inject_version():
+    # Jinja から {{ version_info.* }} で参照可能（index.html のバッジ表示用）
+    return dict(version_info=VERSION_INFO)
+
+@app.route("/version")
+def version():
+    return jsonify(VERSION_INFO), 200
+
+@app.route("/healthz")
+def healthz():
+    # liveness: プロセスが生きているか
+    return "ok", 200
+
+@app.route("/readyz")
+def readyz():
+    # readiness: 依存先の軽いチェック（必要に応じて拡張）
+    required = []  # 例: ["SUPABASE_URL","SUPABASE_KEY"]
+    missing = [k for k in required if not os.getenv(k)]
+    if missing:
+        return jsonify({"ready": False, "missing_env": missing}), 503
+    return jsonify({"ready": True}), 200
 
 # APIキーなど
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
@@ -65,9 +97,8 @@ def camera_test():
     return render_template("camera_test.html")
 
 # --------------------------------
-# 日報関連（任意：使っている場合）
+# 日報関連
 # --------------------------------
-
 def _safe_list_media(dir_path: Path, exts: set[str]) -> list[str]:
     items = []
     try:
@@ -76,12 +107,11 @@ def _safe_list_media(dir_path: Path, exts: set[str]) -> list[str]:
             return items
         for child in p.iterdir():
             if child.is_file() and child.suffix.lower() in exts:
-                items.append(child.name)  # ここは「名前のみ」を返す
+                items.append(child.name)  # ファイル名のみ返す
     except Exception as e:
         logging.warning(f"list_media error at {dir_path}: {e}")
     return sorted(items)
 
-# === /daily_report を丸ごと置換 ===
 @app.route("/daily_report", methods=["GET"])
 def daily_report():
     now = (datetime.utcnow() + timedelta(hours=9)).strftime("%Y-%m-%d %H:%M")
@@ -111,8 +141,6 @@ def daily_report():
     images = _safe_list_media(UPLOAD_DIR, img_exts)
     videos_root = _safe_list_media(UPLOAD_DIR, vid_exts)
     videos_sub  = _safe_list_media(VIDEO_DIR, vid_exts)
-
-    # テンプレ側が `url_for('static', filename='uploads/' + path)` で読む想定
     videos = videos_root + [f"videos/{name}" for name in videos_sub]
 
     return render_template("daily_report.html",
@@ -364,7 +392,7 @@ def explain_term():
         return jsonify({"explanation": msg, "definition": msg}), 200
 
 # --------------------------------
-# 翻訳（既存利用中なら）
+# 翻訳
 # --------------------------------
 @app.route("/ja/translate", methods=["POST"])
 def translate_text():
@@ -407,74 +435,95 @@ def translate_text():
 # --------------------------------
 # TTS（Google Cloud Text-to-Speech）
 # --------------------------------
-@app.route("/tts", methods=["POST"])
-def tts():
+def _normalize_lang(code: str) -> str:
+    """受け取った言語コードをTTS用に正規化"""
+    if not code:
+        return "ja-JP"
+    c = code.strip().lower()
+    if c in ("ja", "ja-jp"): return "ja-JP"
+    if c in ("en", "en-us"): return "en-US"
+    if c in ("vi", "vi-vn"): return "vi-VN"
+    if c in ("tl", "tl-ph", "fil", "fil-ph"): return "fil-PH"  # タガログ語=Filipino
+    return code
+
+_PREFERRED = {
+    "ja-JP": "ja-JP-Neural2-D",
+    "en-US": "en-US-Neural2-C",
+    "vi-VN": "vi-VN-Wavenet-A",
+    "fil-PH": "fil-PH-Wavenet-A",
+}
+
+def _synthesize_mp3(client_tts, text: str, lang: str, voice_name: str|None,
+                    rate: float, pitch: float, volume_db: float) -> bytes:
+    if not text or not text.strip():
+        raise ValueError("text is empty")
+    if not voice_name:
+        voice_name = _PREFERRED.get(lang)
+
+    synthesis_input = texttospeech.SynthesisInput(text=text)
+    audio_config = texttospeech.AudioConfig(
+        audio_encoding=texttospeech.AudioEncoding.MP3,
+        speaking_rate=float(rate),
+        pitch=float(pitch),
+        volume_gain_db=float(volume_db)
+    )
     try:
-        data = request.get_json(force=True)
-        text = (data.get("text") or "").strip()
-        req_lang = (data.get("lang") or "ja-JP").strip()
+        voice = texttospeech.VoiceSelectionParams(language_code=lang, name=voice_name)
+        resp = client_tts.synthesize_speech(
+            input=synthesis_input, voice=voice, audio_config=audio_config
+        )
+    except Exception:
+        voice = texttospeech.VoiceSelectionParams(language_code=lang)
+        resp = client_tts.synthesize_speech(
+            input=synthesis_input, voice=voice, audio_config=audio_config
+        )
+    return resp.audio_content
 
-        if not text:
-            return jsonify({"error": "読み上げるテキストがありません"}), 400
+@app.route("/tts", methods=["POST", "GET", "OPTIONS"])
+def tts():
+    if request.method == "OPTIONS":
+        return ("", 204)
 
-        # 言語コード正規化
-        lang_map = {
-            "ja": "ja-JP",
-            "en": "en-US",
-            "vi": "vi-VN",
-            "vi-vn": "vi-VN",
-            "tl": "tl-PH",     # タガログ
-            "fil": "tl-PH",
-            "fil-ph": "tl-PH",
-        }
-        norm_lang = lang_map.get(req_lang.lower(), req_lang)
+    if request.method == "POST":
+        data = request.get_json(silent=True) or {}
+        text  = (data.get("text") or "").strip()
+        lang  = _normalize_lang(data.get("lang") or "ja-JP")
+        voice = data.get("voice")
+        rate  = float(data.get("rate", 1.0))
+        pitch = float(data.get("pitch", 0.0))
+        vol   = float(data.get("volume", 0.0))
+    else:
+        text  = (request.args.get("text") or "").strip()
+        lang  = _normalize_lang(request.args.get("lang") or "ja-JP")
+        voice = request.args.get("voice")
+        rate  = float(request.args.get("rate", 1.0))
+        pitch = float(request.args.get("pitch", 0.0))
+        vol   = float(request.args.get("volume", 0.0))
 
-        # 声をできるだけ指定（無ければ自動フォールバック）
-        preferred_voice = None
-        if norm_lang == "vi-VN":
-            preferred_voice = "vi-VN-Neural2-A"
-        elif norm_lang == "tl-PH":
-            preferred_voice = "tl-PH-Wavenet-A"
-        elif norm_lang == "en-US":
-            preferred_voice = "en-US-Neural2-C"
-        elif norm_lang == "ja-JP":
-            preferred_voice = "ja-JP-Neural2-D"
+    if not text:
+        return jsonify({"error": "読み上げるテキストがありません"}), 400
 
+    try:
         client_tts = texttospeech.TextToSpeechClient()
-        synthesis_input = texttospeech.SynthesisInput(text=text)
-
-        try:
-            voice = texttospeech.VoiceSelectionParams(
-                language_code=norm_lang,
-                name=preferred_voice
-            )
-            audio_config = texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.MP3)
-            response = client_tts.synthesize_speech(
-                input=synthesis_input, voice=voice, audio_config=audio_config
-            )
-        except Exception as e:
-            logging.warning(f"TTS fallback without name: {e}")
-            voice = texttospeech.VoiceSelectionParams(language_code=norm_lang)
-            audio_config = texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.MP3)
-            response = client_tts.synthesize_speech(
-                input=synthesis_input, voice=voice, audio_config=audio_config
-            )
-
-        return (response.audio_content, 200, {"Content-Type": "audio/mpeg"})
-
+        audio = _synthesize_mp3(client_tts, text, lang, voice, rate, pitch, vol)
+        return (audio, 200, {
+            "Content-Type": "audio/mpeg",
+            "Content-Disposition": 'inline; filename="tts.mp3"',
+            "Cache-Control": "no-store"
+        })
     except Exception as e:
         logging.exception("TTSエラー")
-        return jsonify({"error": "TTSに失敗しました"}), 500
+        return jsonify({"error": f"TTSに失敗しました: {e}"}), 500
 
 # --------------------------------
-# アップロード配信（必要なら）
+# アップロード配信
 # --------------------------------
 @app.route("/uploads/<path:filename>", methods=["GET"])
 def serve_uploads(filename):
     return send_from_directory(UPLOAD_DIR, filename)
 
 # --------------------------------
-# テストPDF（依存確認用・任意）
+# テストPDF（依存確認用）
 # --------------------------------
 @app.get("/test-pdf")
 def test_pdf():
