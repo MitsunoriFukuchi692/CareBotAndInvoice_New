@@ -554,6 +554,45 @@ def save_log():
         logging.error(f"save_log error: {e}")
         return jsonify({"ok": False, "error": "write-failed"}), 500
 
+# ===== HOTFIX: version badge & health endpoints =====
+import os, datetime
+from flask import jsonify
+
+# 既に定義済みでも上書きでOK
+STARTED_AT = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+VERSION_INFO = {
+    "service": os.getenv("SERVICE_NAME", "carebotandinvoice-v2"),
+    "git": (os.getenv("GIT_SHA") or os.getenv("RENDER_GIT_COMMIT", ""))[:7],
+    "built": os.getenv("BUILD_TIME", STARTED_AT),
+    "env": os.getenv("RENDER_SERVICE_NAME", ""),
+}
+
+# Jinja から {{ version_info.* }} を使えるように
+@app.context_processor
+def _inject_version_info():
+    return dict(version_info=VERSION_INFO)
+
+# /version
+@app.route("/version")
+def _version():
+    return jsonify(VERSION_INFO), 200
+
+# /healthz
+@app.route("/healthz")
+def _healthz():
+    return "ok", 200
+
+# /readyz（必要ENVがあればここでチェック）
+@app.route("/readyz")
+def _readyz():
+    required = []  # 例: ["SUPABASE_URL", "SUPABASE_KEY"]
+    missing = [k for k in required if not os.getenv(k)]
+    if missing:
+        return jsonify({"ready": False, "missing_env": missing}), 503
+    return jsonify({"ready": True}), 200
+# ===== HOTFIX end =====
+
+
 # --------------------------------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
