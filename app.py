@@ -1,33 +1,52 @@
-import os, glob, logging, tempfile, sys, mimetypes, uuid
-from datetime import datetime, timedelta
+# app.py — carebotandinvoice-v2 本番用（重複整理版）
+# 右下バッジ用の /version、ヘルス /healthz・/readyz、デバッグ /__test__ も1か所で定義
+
+import os, sys, glob, logging, tempfile, mimetypes, uuid, datetime
 from pathlib import Path
 from io import BytesIO
 
 from flask import Flask, render_template, request, jsonify, send_from_directory, send_file, url_for
 from flask_cors import CORS
+from PIL import Image
+from fpdf import FPDF
 from google.cloud import texttospeech
 from openai import OpenAI
-import stripe
-from fpdf import FPDF
-from PIL import Image
-import httpx, openai as _o
+import httpx
+import openai as _o
 
 # --------------------------------
 # 基本設定
 # --------------------------------
-app = Flask(__name__)
+app = Flask(__name__, static_folder="static", template_folder="templates")
 app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
 app.config["TEMPLATES_AUTO_RELOAD"] = True
+app.config["MAX_CONTENT_LENGTH"] = 100 * 1024 * 1024  # 100MB
 CORS(app)
 
-# 起動時のバージョン確認ログ（デバッグ用）
+# 起動ログ
 logging.basicConfig(level=logging.INFO)
 logging.info(f"[BOOT] Python={sys.version}")
 logging.info(f"[BOOT] httpx={httpx.__version__}")
 logging.info(f"[BOOT] openai={_o.__version__}")
 
-# ---- Version info（追加） ----
-STARTED_AT = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+# ディレクトリ
+BASE_DIR = Path(__file__).resolve().parent
+UPLOAD_DIR = BASE_DIR / "static" / "uploads"
+VIDEO_DIR  = UPLOAD_DIR / "videos"
+LOG_DIR    = BASE_DIR / "logs"
+for d in (UPLOAD_DIR, VIDEO_DIR, LOG_DIR):
+    d.mkdir(parents=True, exist_ok=True)
+
+# APIキーなど
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+client = OpenAI(api_key=OPENAI_API_KEY)
+
+# --------------------------------
+# /version /healthz /readyz /__test__（ここで一括定義）
+# --------------------------------
+from flask import jsonify  # 局所import可
+
+STARTED_AT = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 VERSION_INFO = {
     "service": os.getenv("SERVICE_NAME", "carebotandinvoice-v2"),
     "git": (os.getenv("GIT_SHA") or os.getenv("RENDER_GIT_COMMIT", ""))[:7],
@@ -36,8 +55,8 @@ VERSION_INFO = {
 }
 
 @app.context_processor
-def inject_version():
-    # Jinja から {{ version_info.* }} で参照可能（index.html のバッジ表示用）
+def inject_version_info():
+    # index.html から {{ version_info.* }} で参照
     return dict(version_info=VERSION_INFO)
 
 @app.route("/version")
@@ -46,35 +65,37 @@ def version():
 
 @app.route("/healthz")
 def healthz():
-    # liveness: プロセスが生きているか
     return "ok", 200
 
 @app.route("/readyz")
 def readyz():
-    # readiness: 依存先の軽いチェック（必要に応じて拡張）
-    required = []  # 例: ["SUPABASE_URL","SUPABASE_KEY"]
+    # 依存先チェックが必要なら required にENV名を列挙
+    required = []  # 例: ["SUPABASE_URL", "SUPABASE_KEY"]
     missing = [k for k in required if not os.getenv(k)]
     if missing:
         return jsonify({"ready": False, "missing_env": missing}), 503
     return jsonify({"ready": True}), 200
 
-# APIキーなど
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-client = OpenAI(api_key=OPENAI_API_KEY)
-stripe.api_key = os.getenv("STRIPE_SECRET_KEY", "")
+@app.route("/__test__")
+def __test__():
+    return "__test__ ok", 200
 
-# 保存先（統一）
-BASE_DIR = Path(__file__).resolve().parent
-UPLOAD_DIR = BASE_DIR / "static" / "uploads"
-VIDEO_DIR = UPLOAD_DIR / "videos"
-LOG_DIR = BASE_DIR / "logs"
-UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-VIDEO_DIR.mkdir(parents=True, exist_ok=True)
-LOG_DIR.mkdir(parents=True, exist_ok=True)
+# --------------------------------
+# 共通ユーティリティ
+# --------------------------------
+def jst_now_str(fmt="%Y-%m-%d %H:%M"):
+    return (datetime.datetime.utcnow() + datetime.timedelta(hours=9)).strftime(fmt)
 
-# アップロード制限
-app.config["MAX_CONTENT_LENGTH"] = 100 * 1024 * 1024  # 100MB
-ALLOWED_VIDEO_EXTS = {".webm", ".mp4", ".ogg", ".mov"}
+def _safe_list_media(dir_path: Path, exts: set[str]) -> list[str]:
+    items = []
+    try:
+        if not dir_path.exists(): return items
+        for p in dir_path.iterdir():
+            if p.is_file() and p.suffix.lower() in exts:
+                items.append(p.name)
+    except Exception as e:
+        logging.warning(f"list_media error at {dir_path}: {e}")
+    return sorted(items)
 
 # キャッシュ抑止
 @app.after_request
@@ -92,31 +113,18 @@ def add_header(resp):
 def index():
     return render_template("index.html")
 
-@app.route("/camera-test/", methods=["GET"])
+@app.get("/camera-test/")
 def camera_test():
     return render_template("camera_test.html")
 
 # --------------------------------
 # 日報関連
 # --------------------------------
-def _safe_list_media(dir_path: Path, exts: set[str]) -> list[str]:
-    items = []
-    try:
-        p = Path(dir_path)
-        if not p.exists():
-            return items
-        for child in p.iterdir():
-            if child.is_file() and child.suffix.lower() in exts:
-                items.append(child.name)  # ファイル名のみ返す
-    except Exception as e:
-        logging.warning(f"list_media error at {dir_path}: {e}")
-    return sorted(items)
-
-@app.route("/daily_report", methods=["GET"])
+@app.get("/daily_report")
 def daily_report():
-    now = (datetime.utcnow() + timedelta(hours=9)).strftime("%Y-%m-%d %H:%M")
+    now = jst_now_str()
 
-    # 会話要約（失敗しても続行）
+    # 会話ログの要約（失敗しても継続）
     text_report = "ログがありません"
     try:
         files = sorted(glob.glob(str(LOG_DIR / "log_*.txt")))
@@ -126,18 +134,17 @@ def daily_report():
                 model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": "以下の対話ログをもとに、本日の介護日報を日本語で短くまとめてください。"},
-                    {"role": "user", "content": content}
-                ]
+                    {"role": "user", "content": content},
+                ],
+                max_tokens=250,
+                temperature=0.2,
             )
-            text_report = resp.choices[0].message.content.strip()
+            text_report = (resp.choices[0].message.content or "").strip() or text_report
     except Exception as e:
         logging.error(f"要約失敗: {e}")
-        text_report = "要約に失敗しました"
 
-    # 画像・動画を拡張子ベースで収集（videos/配下も見る）
     img_exts = {".jpg", ".jpeg", ".png"}
     vid_exts = {".webm", ".mp4", ".mov", ".ogg"}
-
     images = _safe_list_media(UPLOAD_DIR, img_exts)
     videos_root = _safe_list_media(UPLOAD_DIR, vid_exts)
     videos_sub  = _safe_list_media(VIDEO_DIR, vid_exts)
@@ -147,18 +154,11 @@ def daily_report():
                            now=now, text_report=text_report,
                            images=images, videos=videos)
 
-@app.route("/generate_report_pdf", methods=["GET"])
+@app.get("/generate_report_pdf")
 def generate_report_pdf():
-    now = (datetime.utcnow() + timedelta(hours=9)).strftime("%Y-%m-%d %H:%M")
+    now = jst_now_str()
 
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Arial", size=14)
-    pdf.cell(200, 10, "本日の見守りレポート", ln=True, align="C")
-    pdf.set_font("Arial", size=10)
-    pdf.cell(200, 10, f"作成日時: {now}", ln=True, align="C")
-
-    # 要約
+    # 要約テキスト
     files = sorted(glob.glob(str(LOG_DIR / "log_*.txt")))
     text_report = "ログがありません"
     if files:
@@ -168,20 +168,28 @@ def generate_report_pdf():
                 model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": "以下の対話ログをもとに、本日の介護日報を日本語で短くまとめてください。"},
-                    {"role": "user", "content": content}
-                ]
+                    {"role": "user", "content": content},
+                ],
+                max_tokens=250,
+                temperature=0.2,
             )
-            text_report = resp.choices[0].message.content.strip()
+            text_report = (resp.choices[0].message.content or "").strip() or text_report
         except Exception as e:
             logging.error(f"要約失敗: {e}")
-            text_report = "要約に失敗しました"
+
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=14)
+    pdf.cell(0, 10, "本日の見守りレポート", ln=True, align="C")
+    pdf.set_font("Arial", size=10)
+    pdf.cell(0, 8, f"作成日時: {now}", ln=True, align="C")
 
     pdf.set_font("Arial", size=12)
-    pdf.multi_cell(0, 10, f"会話日報:\n{text_report}")
+    pdf.multi_cell(0, 8, f"会話日報:\n{text_report}")
 
-    # 最新画像（カラー維持）
+    # 最新画像（カラー）
     all_media = os.listdir(UPLOAD_DIR)
-    images = [f for f in all_media if f.startswith("image_")]
+    images = [f for f in all_media if f.lower().startswith("image_")]
     if images:
         latest_img = str(UPLOAD_DIR / sorted(images)[-1])
         try:
@@ -189,31 +197,15 @@ def generate_report_pdf():
             w, h = img.size
             max_h = 150  # mm
             scale = max_h / h
-            new_w, new_h = int(w * scale), int(h * scale)
-            img = img.resize((new_w, new_h))
-
-            tmp_jpg = None
+            img = img.resize((int(w*scale), int(h*scale)))
             with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
                 tmp_jpg = tmp.name
-                img.save(tmp_jpg, "JPEG", quality=92)
-
-            y = pdf.get_y() + 10
+            img.save(tmp_jpg, "JPEG", quality=92)
+            y = pdf.get_y() + 6
             pdf.image(tmp_jpg, x=10, y=y, h=max_h)
+            os.remove(tmp_jpg)
         except Exception as e:
             logging.warning(f"画像挿入エラー: {e}")
-        finally:
-            try:
-                if tmp_jpg and os.path.exists(tmp_jpg):
-                    os.remove(tmp_jpg)
-            except Exception:
-                pass
-
-    # 動画は注記
-    videos = [f for f in all_media if f.startswith("video_")]
-    if videos:
-        pdf.ln(10)
-        pdf.set_font("Arial", size=12)
-        pdf.multi_cell(0, 10, "📹 最新の動画はサーバーに保存されています。")
 
     raw = pdf.output(dest="S")
     pdf_bytes = raw if isinstance(raw, (bytes, bytearray)) else raw.encode("latin-1")
@@ -223,7 +215,7 @@ def generate_report_pdf():
     })
 
 # --------------------------------
-# 画像→PDF（カラー）※カメラページ用
+# 画像→PDF（カラー）
 # --------------------------------
 @app.post("/photo-to-pdf")
 def photo_to_pdf():
@@ -235,7 +227,7 @@ def photo_to_pdf():
         img = Image.open(f.stream).convert("RGB")
         with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
             tmp_path = tmp.name
-            img.save(tmp_path, "JPEG", quality=92)
+        img.save(tmp_path, "JPEG", quality=92)
 
         pdf = FPDF(unit="mm", format="A4")
         pdf.add_page()
@@ -243,13 +235,10 @@ def photo_to_pdf():
 
         raw = pdf.output(dest="S")
         pdf_bytes = raw if isinstance(raw, (bytes, bytearray)) else raw.encode("latin-1")
+        os.remove(tmp_path)
 
-        try:
-            os.remove(tmp_path)
-        except Exception:
-            pass
-
-        return send_file(BytesIO(pdf_bytes), mimetype="application/pdf", as_attachment=True, download_name="photo.pdf")
+        return send_file(BytesIO(pdf_bytes), mimetype="application/pdf",
+                         as_attachment=True, download_name="photo.pdf")
     except Exception as e:
         logging.exception(f"/photo-to-pdf error: {e}")
         return jsonify({"ok": False, "error": "pdf-failed"}), 500
@@ -257,6 +246,8 @@ def photo_to_pdf():
 # --------------------------------
 # 動画アップロード（専用）
 # --------------------------------
+ALLOWED_VIDEO_EXTS = {".webm", ".mp4", ".ogg", ".mov"}
+
 def _ext_from(mimetype_str, fallback=".webm"):
     ext = mimetypes.guess_extension(mimetype_str or "") or fallback
     return ext.lower()
@@ -266,108 +257,86 @@ def _is_allowed_ext(ext):
 
 def _cleanup_old_videos(keep=1):
     files = sorted((p for p in VIDEO_DIR.iterdir() if p.is_file()),
-                   key=lambda p: p.stat().st_mtime,
-                   reverse=True)
+                   key=lambda p: p.stat().st_mtime, reverse=True)
     for p in files[keep:]:
-        try:
-            p.unlink()
-        except Exception:
-            pass
+        try: p.unlink()
+        except Exception: pass
 
-@app.route("/upload_video", methods=["POST"])
+@app.post("/upload_video")
 def upload_video():
     if "video" not in request.files:
         return jsonify({"ok": False, "error": "no-file-field"}), 400
-
     f = request.files["video"]
-    if not f or f.filename.strip() == "":
+    if not f or not f.filename.strip():
         return jsonify({"ok": False, "error": "empty-file"}), 400
 
-    # 拡張子判定（filename優先→無ければmimetype）
     name_ext = os.path.splitext(f.filename)[1].lower()
     if not name_ext or not _is_allowed_ext(name_ext):
         name_ext = _ext_from(getattr(f, "mimetype", None), fallback=".webm")
     if not _is_allowed_ext(name_ext):
         return jsonify({"ok": False, "error": "unsupported-ext"}), 400
 
-    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     fname = f"{stamp}-{uuid.uuid4().hex}{name_ext}"
     save_path = VIDEO_DIR / fname
     f.save(save_path)
 
-    # 古い動画は削除（最新のみ保持）
     _cleanup_old_videos(keep=1)
-
-    # 即再生用URL
     url = url_for("static", filename=f"uploads/videos/{fname}")
     return jsonify({"ok": True, "url": url, "filename": fname}), 200
 
 # --------------------------------
 # 既存：メディアのアップロード（画像/動画 共通API）
 # --------------------------------
-@app.route("/upload_media", methods=["POST"])
+@app.post("/upload_media")
 def upload_media():
     """
     受け取り:
       - media_type: "image" | "video"
       - file: Blob/File
-    動画は最新1件だけ保持（既存video_削除）
+    動画は最新1件だけ保持（旧video_を削除）
     """
     media_type = request.form.get("media_type")
     file = request.files.get("file")
-
     if not media_type or not file:
         return jsonify({"error": "media_type or file missing"}), 400
 
-    # 動画は古いものを削除
     if media_type == "video":
         for f in os.listdir(UPLOAD_DIR):
             if f.startswith("video_"):
-                try:
-                    (UPLOAD_DIR / f).unlink()
-                except Exception as e:
-                    logging.warning(f"古い動画削除失敗: {f}, {e}")
+                try: (UPLOAD_DIR / f).unlink()
+                except Exception as e: logging.warning(f"古い動画削除失敗: {f}, {e}")
 
-    # 拡張子
     _, ext = os.path.splitext(file.filename or "")
     if not ext:
         ext = ".webm" if media_type == "video" else ".jpg"
 
-    ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    ts = datetime.datetime.utcnow().strftime("%Y%m%d_%H%M%S")
     filename = f"{media_type}_{ts}{ext}"
     save_path = UPLOAD_DIR / filename
 
     try:
         file.save(save_path)
-        return jsonify({"status": "saved", "filename": filename, "url": f"/static/uploads/{filename}"}), 200
+        return jsonify({"status": "saved", "filename": filename,
+                        "url": f"/static/uploads/{filename}"}), 200
     except Exception as e:
         logging.error(f"保存エラー: {e}")
         return jsonify({"error": str(e)}), 500
 
 # --------------------------------
-# 用語説明（失敗時も200で短文を返す）
+# 用語説明（短文・失敗時も200）
 # --------------------------------
-@app.route("/ja/explain", methods=["POST"])
+@app.post("/ja/explain")
 def explain_term():
     try:
         data = request.get_json(silent=True) or {}
         term = (
-            request.args.get("term")
-            or request.form.get("term")
-            or data.get("term")
-            or request.args.get("word")
-            or request.form.get("word")
-            or data.get("word")
-            or ""
+            request.args.get("term") or request.form.get("term") or data.get("term") or
+            request.args.get("word") or request.form.get("word") or data.get("word") or ""
         ).strip()
-
         max_len = int(
-            request.args.get("maxLength")
-            or request.form.get("maxLength")
-            or data.get("maxLength")
-            or 30
+            request.args.get("maxLength") or request.form.get("maxLength") or data.get("maxLength") or 30
         )
-
         if not term:
             msg = "用語が空です"
             return jsonify({"explanation": msg, "definition": msg}), 400
@@ -379,13 +348,12 @@ def explain_term():
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=120, temperature=0.2, timeout=12,
             )
-            text = (resp.choices[0].message.content or "").strip() or "短い説明を生成できませんでした"
+            text = (resp.choices[0].message.content or "").strip() or f"{term}: かんたんな説明です"
         except Exception as inner:
             logging.warning(f"OpenAI失敗: {inner}")
             text = f"{term}: かんたんな説明です"
 
         return jsonify({"explanation": text, "definition": text}), 200
-
     except Exception as e:
         logging.exception(f"/ja/explain error: {e}")
         msg = "説明に失敗しました"
@@ -394,7 +362,7 @@ def explain_term():
 # --------------------------------
 # 翻訳
 # --------------------------------
-@app.route("/ja/translate", methods=["POST"])
+@app.post("/ja/translate")
 def translate_text():
     try:
         data = request.get_json(force=True)
@@ -403,47 +371,37 @@ def translate_text():
         if not text:
             return jsonify({"error": "翻訳するテキストがありません"}), 400
 
-        if direction == "ja-en":
-            system_prompt = "次の日本語を英語に翻訳してください。"
-        elif direction == "en-ja":
-            system_prompt = "次の英語を日本語に翻訳してください。"
-        elif direction == "ja-vi":
-            system_prompt = "次の日本語をベトナム語に翻訳してください。"
-        elif direction == "vi-ja":
-            system_prompt = "次のベトナム語を日本語に翻訳してください。"
-        elif direction == "ja-tl":
-            system_prompt = "次の日本語をタガログ語に翻訳してください。"
-        elif direction == "tl-ja":
-            system_prompt = "次のタガログ語を日本語に翻訳してください。"
+        if   direction == "ja-en": sys_prompt = "次の日本語を英語に翻訳してください。"
+        elif direction == "en-ja": sys_prompt = "次の英語を日本語に翻訳してください。"
+        elif direction == "ja-vi": sys_prompt = "次の日本語をベトナム語に翻訳してください。"
+        elif direction == "vi-ja": sys_prompt = "次のベトナム語を日本語に翻訳してください。"
+        elif direction == "ja-tl": sys_prompt = "次の日本語をタガログ語に翻訳してください。"
+        elif direction == "tl-ja": sys_prompt = "次のタガログ語を日本語に翻訳してください。"
         else:
             return jsonify({"error": f"未対応の翻訳方向: {direction}"}), 400
 
         response = client.chat.completions.create(
             model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": text}
-            ],
-            max_tokens=150
+            messages=[{"role": "system", "content": sys_prompt},
+                      {"role": "user", "content": text}],
+            max_tokens=200
         )
-        translated = response.choices[0].message.content.strip()
+        translated = (response.choices[0].message.content or "").strip()
         return jsonify({"translated": translated})
     except Exception as e:
         logging.error(f"翻訳エラー: {e}")
         return jsonify({"error": "翻訳に失敗しました"}), 500
 
 # --------------------------------
-# TTS（Google Cloud Text-to-Speech）
+# TTS（Google Text-to-Speech）
 # --------------------------------
 def _normalize_lang(code: str) -> str:
-    """受け取った言語コードをTTS用に正規化"""
-    if not code:
-        return "ja-JP"
+    if not code: return "ja-JP"
     c = code.strip().lower()
     if c in ("ja", "ja-jp"): return "ja-JP"
     if c in ("en", "en-us"): return "en-US"
     if c in ("vi", "vi-vn"): return "vi-VN"
-    if c in ("tl", "tl-ph", "fil", "fil-ph"): return "fil-PH"  # タガログ語=Filipino
+    if c in ("tl", "tl-ph", "fil", "fil-ph"): return "fil-PH"
     return code
 
 _PREFERRED = {
@@ -453,37 +411,26 @@ _PREFERRED = {
     "fil-PH": "fil-PH-Wavenet-A",
 }
 
-def _synthesize_mp3(client_tts, text: str, lang: str, voice_name: str|None,
+def _synthesize_mp3(client_tts, text: str, lang: str, voice: str|None,
                     rate: float, pitch: float, volume_db: float) -> bytes:
-    if not text or not text.strip():
-        raise ValueError("text is empty")
-    if not voice_name:
-        voice_name = _PREFERRED.get(lang)
-
+    if not text.strip(): raise ValueError("text is empty")
+    if not voice: voice = _PREFERRED.get(lang)
     synthesis_input = texttospeech.SynthesisInput(text=text)
     audio_config = texttospeech.AudioConfig(
         audio_encoding=texttospeech.AudioEncoding.MP3,
-        speaking_rate=float(rate),
-        pitch=float(pitch),
-        volume_gain_db=float(volume_db)
+        speaking_rate=float(rate), pitch=float(pitch), volume_gain_db=float(volume_db)
     )
     try:
-        voice = texttospeech.VoiceSelectionParams(language_code=lang, name=voice_name)
-        resp = client_tts.synthesize_speech(
-            input=synthesis_input, voice=voice, audio_config=audio_config
-        )
+        voice_sel = texttospeech.VoiceSelectionParams(language_code=lang, name=voice)
+        resp = client_tts.synthesize_speech(input=synthesis_input, voice=voice_sel, audio_config=audio_config)
     except Exception:
-        voice = texttospeech.VoiceSelectionParams(language_code=lang)
-        resp = client_tts.synthesize_speech(
-            input=synthesis_input, voice=voice, audio_config=audio_config
-        )
+        voice_sel = texttospeech.VoiceSelectionParams(language_code=lang)
+        resp = client_tts.synthesize_speech(input=synthesis_input, voice=voice_sel, audio_config=audio_config)
     return resp.audio_content
 
 @app.route("/tts", methods=["POST", "GET", "OPTIONS"])
 def tts():
-    if request.method == "OPTIONS":
-        return ("", 204)
-
+    if request.method == "OPTIONS": return ("", 204)
     if request.method == "POST":
         data = request.get_json(silent=True) or {}
         text  = (data.get("text") or "").strip()
@@ -499,9 +446,7 @@ def tts():
         rate  = float(request.args.get("rate", 1.0))
         pitch = float(request.args.get("pitch", 0.0))
         vol   = float(request.args.get("volume", 0.0))
-
-    if not text:
-        return jsonify({"error": "読み上げるテキストがありません"}), 400
+    if not text: return jsonify({"error": "読み上げるテキストがありません"}), 400
 
     try:
         client_tts = texttospeech.TextToSpeechClient()
@@ -509,22 +454,19 @@ def tts():
         return (audio, 200, {
             "Content-Type": "audio/mpeg",
             "Content-Disposition": 'inline; filename="tts.mp3"',
-            "Cache-Control": "no-store"
+            "Cache-Control": "no-store",
         })
     except Exception as e:
         logging.exception("TTSエラー")
         return jsonify({"error": f"TTSに失敗しました: {e}"}), 500
 
 # --------------------------------
-# アップロード配信
+# 配信とユーティリティ
 # --------------------------------
-@app.route("/uploads/<path:filename>", methods=["GET"])
+@app.get("/uploads/<path:filename>")
 def serve_uploads(filename):
     return send_from_directory(UPLOAD_DIR, filename)
 
-# --------------------------------
-# テストPDF（依存確認用）
-# --------------------------------
 @app.get("/test-pdf")
 def test_pdf():
     pdf = FPDF()
@@ -538,13 +480,13 @@ def test_pdf():
         "Content-Disposition": "attachment; filename=test.pdf"
     })
 
-@app.route("/ja/save_log", methods=["POST"])
+@app.post("/ja/save_log")
 def save_log():
     data = request.get_json(silent=True) or {}
     log_text = (data.get("log") or "").strip()
     if not log_text:
         return jsonify({"ok": False, "error": "empty-log"}), 400
-    ts = (datetime.utcnow() + timedelta(hours=9)).strftime("%Y%m%d_%H%M%S")
+    ts = (datetime.datetime.utcnow() + datetime.timedelta(hours=9)).strftime("%Y%m%d_%H%M%S")
     path = LOG_DIR / f"log_{ts}.txt"
     try:
         with open(path, "w", encoding="utf-8") as f:
@@ -554,108 +496,9 @@ def save_log():
         logging.error(f"save_log error: {e}")
         return jsonify({"ok": False, "error": "write-failed"}), 500
 
-# ===== HOTFIX: version badge & health endpoints =====
-import os, datetime
-from flask import jsonify
-
-# 既に定義済みでも上書きでOK
-STARTED_AT = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-VERSION_INFO = {
-    "service": os.getenv("SERVICE_NAME", "carebotandinvoice-v2"),
-    "git": (os.getenv("GIT_SHA") or os.getenv("RENDER_GIT_COMMIT", ""))[:7],
-    "built": os.getenv("BUILD_TIME", STARTED_AT),
-    "env": os.getenv("RENDER_SERVICE_NAME", ""),
-}
-
-# Jinja から {{ version_info.* }} を使えるように
-@app.context_processor
-def _inject_version_info():
-    return dict(version_info=VERSION_INFO)
-
-# /version
-@app.route("/version")
-def _version():
-    return jsonify(VERSION_INFO), 200
-
-# /healthz
-@app.route("/healthz")
-def _healthz():
-    return "ok", 200
-
-# /readyz（必要ENVがあればここでチェック）
-@app.route("/readyz")
-def _readyz():
-    required = []  # 例: ["SUPABASE_URL", "SUPABASE_KEY"]
-    missing = [k for k in required if not os.getenv(k)]
-    if missing:
-        return jsonify({"ready": False, "missing_env": missing}), 503
-    return jsonify({"ready": True}), 200
-# ===== HOTFIX end =====
-
-# ===== debug: show routes + meta endpoints =====
-import os, datetime
-from flask import jsonify
-
-STARTED_AT = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-VERSION_INFO = {
-    "service": os.getenv("SERVICE_NAME", "carebotandinvoice-v2"),
-    "git": (os.getenv("GIT_SHA") or os.getenv("RENDER_GIT_COMMIT", ""))[:7],
-    "built": os.getenv("BUILD_TIME", STARTED_AT),
-    "env": os.getenv("RENDER_SERVICE_NAME", ""),
-}
-
-@app.context_processor
-def __inject_version_info():
-    return dict(version_info=VERSION_INFO)
-
-@app.route("/version")
-def __version():
-    return jsonify(VERSION_INFO), 200
-
-@app.route("/healthz")
-def __healthz():
-    return "ok", 200
-
-@app.route("/readyz")
-def __readyz():
-    return jsonify({"ready": True}), 200
-
-@app.route("/routes")
-def __routes():
-    # ルート一覧を文字列で返す（確認用）
-    return "<pre>" + "\n".join(sorted(str(r) for r in app.url_map.iter_rules())) + "</pre>", 200
-
-# 起動時にルート一覧をログへ（確認用）
-try:
-    app.logger.info("URL_MAP:\n" + "\n".join(sorted(str(r) for r in app.url_map.iter_rules())))
-except Exception:
-    pass
-# ===== end debug =====
-
-
+# --------------------------------
+# エントリポイント
 # --------------------------------
 if __name__ == "__main__":
-print("=== LOADED APP.PY ===")
-
-@app.route("/debugcheck")
-def debugcheck():
-    return "debug route alive", 200
-
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
-
-# --- force-register meta routes early ---
-import os, datetime
-from flask import jsonify
-STARTED_AT = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-VERSION_INFO = {
-    "service": os.getenv("SERVICE_NAME", "carebotandinvoice-v2"),
-    "git": (os.getenv("GIT_SHA") or os.getenv("RENDER_GIT_COMMIT", ""))[:7],
-    "built": os.getenv("BUILD_TIME", STARTED_AT),
-    "env": os.getenv("RENDER_SERVICE_NAME", ""),
-}
-app.add_url_rule("/version", "version_meta", lambda: (jsonify(VERSION_INFO), 200))
-app.add_url_rule("/healthz", "healthz_meta", lambda: ("ok", 200))
-app.add_url_rule("/readyz", "readyz_meta", lambda: (jsonify({"ready": True}), 200))
-@app.context_processor
-def _inject_version_info(): return dict(version_info=VERSION_INFO)
-
+    port = int(os.getenv("PORT", "5000"))
+    app.run(host="0.0.0.0", port=port, debug=False)
