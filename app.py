@@ -636,3 +636,20 @@ except Exception:
 # --------------------------------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+
+# --- force-register meta routes early ---
+import os, datetime
+from flask import jsonify
+STARTED_AT = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+VERSION_INFO = {
+    "service": os.getenv("SERVICE_NAME", "carebotandinvoice-v2"),
+    "git": (os.getenv("GIT_SHA") or os.getenv("RENDER_GIT_COMMIT", ""))[:7],
+    "built": os.getenv("BUILD_TIME", STARTED_AT),
+    "env": os.getenv("RENDER_SERVICE_NAME", ""),
+}
+app.add_url_rule("/version", "version_meta", lambda: (jsonify(VERSION_INFO), 200))
+app.add_url_rule("/healthz", "healthz_meta", lambda: ("ok", 200))
+app.add_url_rule("/readyz", "readyz_meta", lambda: (jsonify({"ready": True}), 200))
+@app.context_processor
+def _inject_version_info(): return dict(version_info=VERSION_INFO)
+
