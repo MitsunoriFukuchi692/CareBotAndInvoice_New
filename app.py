@@ -635,6 +635,12 @@ except Exception:
 
 # --------------------------------
 if __name__ == "__main__":
+print("=== LOADED APP.PY ===")
+
+@app.route("/debugcheck")
+def debugcheck():
+    return "debug route alive", 200
+
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
 
 # --- force-register meta routes early ---
