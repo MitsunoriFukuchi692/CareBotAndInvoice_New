@@ -592,6 +592,46 @@ def _readyz():
     return jsonify({"ready": True}), 200
 # ===== HOTFIX end =====
 
+# ===== debug: show routes + meta endpoints =====
+import os, datetime
+from flask import jsonify
+
+STARTED_AT = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+VERSION_INFO = {
+    "service": os.getenv("SERVICE_NAME", "carebotandinvoice-v2"),
+    "git": (os.getenv("GIT_SHA") or os.getenv("RENDER_GIT_COMMIT", ""))[:7],
+    "built": os.getenv("BUILD_TIME", STARTED_AT),
+    "env": os.getenv("RENDER_SERVICE_NAME", ""),
+}
+
+@app.context_processor
+def __inject_version_info():
+    return dict(version_info=VERSION_INFO)
+
+@app.route("/version")
+def __version():
+    return jsonify(VERSION_INFO), 200
+
+@app.route("/healthz")
+def __healthz():
+    return "ok", 200
+
+@app.route("/readyz")
+def __readyz():
+    return jsonify({"ready": True}), 200
+
+@app.route("/routes")
+def __routes():
+    # ルート一覧を文字列で返す（確認用）
+    return "<pre>" + "\n".join(sorted(str(r) for r in app.url_map.iter_rules())) + "</pre>", 200
+
+# 起動時にルート一覧をログへ（確認用）
+try:
+    app.logger.info("URL_MAP:\n" + "\n".join(sorted(str(r) for r in app.url_map.iter_rules())))
+except Exception:
+    pass
+# ===== end debug =====
+
 
 # --------------------------------
 if __name__ == "__main__":
