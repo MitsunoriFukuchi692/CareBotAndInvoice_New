@@ -14,6 +14,8 @@ from openai import OpenAI
 import httpx
 import openai as _o
 
+print("Using GOOGLE_APPLICATION_CREDENTIALS:", os.getenv("GOOGLE_APPLICATION_CREDENTIALS"))
+
 # --------------------------------
 # 基本設定
 # --------------------------------
