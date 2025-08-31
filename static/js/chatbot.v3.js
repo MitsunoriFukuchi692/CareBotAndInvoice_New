@@ -1,62 +1,39 @@
-// === chatbot.v3.js (完全版: lang連動・サーバーTTS/日本語はブラウザTTS・各所安定化) ===
-console.log("[chatbot.v3.js] v=20250830-full");
+// === chatbot.v3.js (server TTS版) ===
+console.log("[chatbot.v3.js] v=20250811g");
 
-// ----------------------------
-//  iOS 無音対策（初回操作でAudio解錠）
-// ----------------------------
+// --- iOS 無音対策（初回タップでオーディオ解錠＆単一Audioで再生） ---
 let __audioUnlocked = false;
-function __unlockAudio() {
+window.addEventListener('touchstart', () => {
   if (__audioUnlocked) return;
-  try {
-    const a = new Audio();
-    a.muted = true;
-    a.play().catch(()=>{}).finally(()=>{ __audioUnlocked = true; });
-  } catch (_) {}
-}
-window.addEventListener('touchstart', __unlockAudio, { once: true });
-window.addEventListener('click', __unlockAudio, { once: true });
-
-// 単一インスタンスでTTSを再生
+  const a = new Audio(); a.muted = true;
+  a.play().catch(()=>{}).finally(()=>{ __audioUnlocked = true; });
+}, { once: true });
 const __ttsAudio = new Audio();
 
-// ----------------------------
-//  サーバーTTS（/tts -> audio/mp3 or audio/mpeg）
-//  text: 文字列, langCode: "ja-JP" | "vi-VN" | "fil-PH" 等
-// ----------------------------
+// --- サーバーTTS（/tts -> mp3） ---
 async function speakViaServer(text, langCode){
   if (!text) return;
   try{
     console.log("[TTS] /tts", { langCode, sample: text.slice(0,30) });
     const res = await fetch("/tts", {
       method: "POST",
-      headers: {"Content-Type":"application/json", "Accept":"audio/mpeg"},
+      headers: {"Content-Type":"application/json"},
       body: JSON.stringify({ text, lang: langCode })
     });
-    if (!res.ok) throw new Error(`TTS failed: ${res.status}`);
-
+    if (!res.ok) throw new Error("TTS failed");
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
-
-    // 既存再生を停止・URL解放
-    try { __ttsAudio.pause(); } catch (_) {}
-    // 後処理（再生終了時にURLを解放）
-    __ttsAudio.onended = () => {
-      try { URL.revokeObjectURL(url); } catch (_) {}
-      __ttsAudio.src = "";
-    };
-
     __ttsAudio.src = url;
     __ttsAudio.muted = false;
     await __ttsAudio.play();
+    URL.revokeObjectURL(url);
   }catch(e){
     console.error("[speakViaServer] error:", e);
     alert("音声再生に失敗しました。");
   }
 }
 
-// ----------------------------
-//  ユーティリティ
-// ----------------------------
+// ===== ユーティリティ =====
 const $ = (sel) => document.querySelector(sel);
 
 // サーバ応答からテキストを安全に取り出す
@@ -64,27 +41,21 @@ function pickText(data){
   if (!data) return "";
   if (typeof data === "string") return data;
   return (
-    data.translated ||
     data.text || data.explanation || data.definition || data.summary ||
     data.message || data.result ||
-    (Array.isArray(data.choices) && data.choices[0]?.message?.content) ||
-    ""
+    (Array.isArray(data.choices) && data.choices[0]?.message?.content) || ""
   );
 }
 
-// ----------------------------
-//  日本語の画面メッセージはブラウザTTSで軽量に
-// ----------------------------
-function speak(text){
+// ===== 画面メッセージ（日本語だけはブラウザTTSで軽量化） =====
+function speak(text, role){
   if (!text) return;
-  if (!("speechSynthesis" in window)) return;
   const u = new SpeechSynthesisUtterance(text);
-  u.volume = 1.0; u.rate = 1.0; u.pitch = 1.0;
+  u.volume = 1.0; u.rate = 1.0;
   u.lang = "ja-JP";
-  try { window.speechSynthesis.cancel(); } catch (_) {}
+  window.speechSynthesis.cancel();
   window.speechSynthesis.speak(u);
 }
-
 function appendMessage(role, text){
   const chatWindow = $("#chat-window");
   const div = document.createElement("div");
@@ -94,13 +65,10 @@ function appendMessage(role, text){
   div.textContent = (role === "caregiver" ? "介護士: " : role === "caree" ? "被介護者: " : "") + text;
   chatWindow.appendChild(div);
   chatWindow.scrollTop = chatWindow.scrollHeight;
-  // 画面系は日本語のみ想定のためブラウザTTS
-  speak(text);
+  speak(text, role); // 日本語
 }
 
-// ----------------------------
-//  テンプレ会話
-// ----------------------------
+// ===== テンプレ会話 =====
 const caregiverTemplates = {
   "体調": ["今日は元気ですか？","どこか痛いところはありますか？","疲れは残っていますか？","最近の体温はどうですか？"],
   "食事": ["朝ごはんは食べましたか？","食欲はありますか？","最近食べた美味しかったものは？","食事の量は十分でしたか？"],
@@ -115,7 +83,6 @@ const careeResponses = {
   "睡眠": ["よく眠れました","途中で目が覚めました","眠気があります","眠れませんでした"],
   "排便": ["普通でした","少し便秘気味です","下痢でした","昨日ありました"]
 };
-
 function showTemplates(role, category = null){
   const templateContainer = $("#template-buttons");
   templateContainer.innerHTML = "";
@@ -145,16 +112,12 @@ function showTemplates(role, category = null){
   });
 }
 
-// ----------------------------
-//  マイク入力（日本語）
-// ----------------------------
+// ===== マイク入力 =====
 function setupMic(btn, input){
   if (!btn || !input) return;
   btn.addEventListener("click", () => {
     try{
-      const Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (!Rec) throw new Error("SpeechRecognition not supported");
-      const rec = new Rec();
+      const rec = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
       rec.lang = "ja-JP";
       rec.onresult = e => input.value = e.results[0][0].transcript;
       rec.start();
@@ -165,61 +128,55 @@ function setupMic(btn, input){
   });
 }
 
-// ----------------------------
-//  用語説明（/ja/explain）
-// ----------------------------
+// ===== 用語説明 =====
 async function fetchExplain(term){
-  // JSON → x-www-form-urlencoded → GET の順でフォールバック
-  const tryFetch = async (init) => {
-    const res = await fetch("/ja/explain", init);
+  try{
+    const res = await fetch("/ja/explain", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ term, maxLength: 30 })
+    });
     const data = await res.json().catch(() => ({}));
     if (res.ok){
       const text = pickText(data);
       if (text) return text;
     }
-    return "";
-  };
-  try {
-    const a = await tryFetch({
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ term, maxLength: 30 })
-    });
-    if (a) return a;
-  } catch(_) {}
-  try {
-    const b = await tryFetch({
+  }catch(e){}
+  try{
+    const res = await fetch("/ja/explain", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
       body: new URLSearchParams({ term, maxLength: 30 })
     });
-    if (b) return b;
-  } catch(_) {}
-  try {
+    const data = await res.json().catch(() => ({}));
+    if (res.ok){
+      const text = pickText(data);
+      if (text) return text;
+    }
+  }catch(e){}
+  try{
     const url = `/ja/explain?term=${encodeURIComponent(term)}&maxLength=30`;
-    const c = await tryFetch({ method: "GET" });
-    if (c) return c;
-  } catch(_) {}
+    const res = await fetch(url, { method: "GET" });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok){
+      const text = pickText(data);
+      if (text) return text;
+    }
+  }catch(e){}
   return "";
 }
 
-// ----------------------------
-//  翻訳（/ja/translate）
-//  direction: "ja-en" | "ja-vi" | "ja-tl" など
-// ----------------------------
+// ===== 翻訳 =====
 async function fetchTranslate(text, direction){
   const res = await fetch("/ja/translate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ text, direction })
   });
-  if (!res.ok) throw new Error(`translate failed: ${res.status}`);
   return res.json();
 }
 
-// ----------------------------
-//  会話ログ保存
-// ----------------------------
+// ===== 会話ログ保存 =====
 async function saveLog(){
   const chatWindow = $("#chat-window");
   const log = chatWindow?.innerText?.trim();
@@ -238,9 +195,7 @@ async function saveLog(){
   }catch(e){ console.error(e); alert("エラーが発生しました。"); }
 }
 
-// ----------------------------
-//  画面初期化
-// ----------------------------
+// ===== エントリーポイント =====
 document.addEventListener("DOMContentLoaded", () => {
   console.log("👉 スクリプト開始");
 
@@ -281,7 +236,7 @@ document.addEventListener("DOMContentLoaded", () => {
     try{
       const text = await fetchExplain(term);
       out.textContent = (text && String(text).trim()) || "(取得できませんでした)";
-      if (text) speak(text); // 日本語読み上げ
+      if (text) speak(text, "caregiver"); // 日本語読み上げ
     }catch(err){
       console.error("[explain] error:", err);
       alert("用語説明に失敗しました");
@@ -290,15 +245,14 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // 翻訳（読み上げはサーバーTTSに統一 → 端末差を排除）
-  // select#translate-direction の値: 例 "ja-en" / "ja-vi" / "ja-tl"
+  // 翻訳（読み上げはサーバーTTS）
   translateBtn?.addEventListener("click", async () => {
     const src = $("#explanation")?.textContent?.trim();
     if (!src){ alert("先に用語説明を入れてください"); return; }
     const direction = $("#translate-direction")?.value || "ja-en";
     try{
       const data = await fetchTranslate(src, direction);
-      const translated = pickText(data) || "";
+      const translated = data.translated || pickText(data) || "";
       $("#translation-result").textContent = translated || "(翻訳できませんでした)";
 
       const speakLangMap = { ja: "ja-JP", en: "en-US", vi: "vi-VN", tl: "fil-PH" };
@@ -321,9 +275,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 });
 
-// ----------------------------
-//  録画 → サーバー保存 → 再生（PC安定版）
-// ----------------------------
+// ====== 録画 → サーバー保存 → 再生（PC安定版） ======
 let mediaRecorder = null;
 let recordedChunks = [];
 
@@ -359,7 +311,7 @@ async function uploadRecordedBlob(blob) {
   const fd = new FormData();
   fd.append("video", blob, "recording.webm");
   const res = await fetch("/upload_video", { method: "POST", body: fd });
-  const data = await res.json().catch(()=>({}));
+  const data = await res.json();
   if (!res.ok || !data.ok) { console.error("Upload failed:", data); throw new Error(data.error || "upload-failed"); }
   const player = document.getElementById("savedVideo");
   if (player) {
