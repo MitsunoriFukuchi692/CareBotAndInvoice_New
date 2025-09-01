@@ -154,5 +154,54 @@
       });
     })();
   </script>
+
+<script>
+/* テンプレート対話のフォールバック: 既存JSが動かなくても表示させる */
+(function(){
+  if (window.__tmplBound) return; window.__tmplBound = true;
+  const btn = document.getElementById('template-start-btn');
+  const box = document.getElementById('template-buttons');
+  const $ = (id)=>document.getElementById(id);
+  if (!btn || !box) return;
+
+  const CARE = [
+    "こんにちは。今日は体調はいかがですか？",
+    "お水を少し飲みましょうか？",
+    "腰の痛みは10段階でどれくらいですか？",
+    "トイレは大丈夫ですか？"
+  ];
+  const LANG = [
+    "おはようございます（Good morning）",
+    "ありがとうございます（Thank you）",
+    "ゆっくり話してください（Please speak slowly）",
+    "もう一度お願いします（One more time, please）"
+  ];
+  const TOUR = [
+    "駅はどちらですか？",
+    "この近くのおすすめは？",
+    "いくらですか？クレジットカード使えますか？",
+    "助けが必要です。道に迷いました。"
+  ];
+
+  function fillTemplates(){
+    const mode = $('mode') ? $('mode').value : 'care';
+    const items = (mode === 'tour') ? TOUR : (mode === 'lang' ? LANG : CARE);
+    box.innerHTML = '';
+    items.forEach(txt=>{
+      const b = document.createElement('button');
+      b.className = 'btn';
+      b.textContent = txt;
+      b.onclick = ()=>{
+        $('caregiver-input').value = txt;
+        $('send-caregiver').click(); // 既存の送信ロジックをそのまま利用
+      };
+      box.appendChild(b);
+    });
+  }
+
+  btn.addEventListener('click', fillTemplates);
+})();
+</script>
+
 </body>
 </html>
