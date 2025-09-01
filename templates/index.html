@@ -115,17 +115,14 @@ document.addEventListener("DOMContentLoaded", () => {
     $("translatedCard")?.classList.toggle("hidden", isCare);
     $("translate-show-btn")?.classList.toggle("hidden", isCare);
 
-    // 介護専用UI（ログ保存・日報／用語説明）は非介護で隠す
+    // 介護専用UIは非介護で隠す
     document.querySelector(".action-buttons")?.classList.toggle("hidden", !isCare);
     $("glossary")?.classList.toggle("hidden", !isCare);
-
-    // 介護モードではテンプレ箱を空にして“既存JSに完全委譲”
-    if (isCare) { $("template-buttons").innerHTML = ""; }
   }
   $("mode")?.addEventListener("change", applyMode);
   applyMode();
 
-  // ===== 非介護モード専用：翻訳→音声 =====
+  // ===== 非介護モード：翻訳→音声 =====
   function ttsLangFrom(pair){
     const p=(pair||"ja-en").toLowerCase();
     if(p==="ja-en")return"en-US";
@@ -156,23 +153,31 @@ document.addEventListener("DOMContentLoaded", () => {
     translateAndShow(txt, $("translate-direction")?.value||"ja-en");
   });
 
-  // ===== テンプレ：介護→何もしない／非介護→こちらで生成 =====
+  // ===== テンプレ：care でも生成して従来JSに委譲、非介護は翻訳 =====
+  const CARE=["こんにちは。今日は体調はいかがですか？","お水を少し飲みましょうか？","腰の痛みは10段階でどれくらいですか？","トイレは大丈夫ですか？"];
   const LANG=["おはようございます（Good morning）","ありがとうございます（Thank you）","ゆっくり話してください（Please speak slowly）","もう一度お願いします（One more time, please）"];
   const TOUR=["駅はどちらですか？","この近くのおすすめは？","いくらですか？カード使えますか？","助けてください。道に迷いました。"];
-  function fillTemplatesNonCare(){
+  function fillTemplates(){
     const m=$("mode")?.value||"care";
-    if(m==="care") return;                // 介護は既存JSに委譲
-    const items = m==="tour" ? TOUR : LANG;
+    const items = m==="tour" ? TOUR : (m==="lang" ? LANG : CARE);
     const box=$("template-buttons"); if(!box) return;
     box.innerHTML="";
     items.forEach(txt=>{
       const b=document.createElement("button");
       b.className="btn"; b.textContent=txt;
-      b.onclick=()=>translateAndShow(txt, $("translate-direction")?.value||"ja-en");
+      b.onclick=()=>{
+        if(m==="care"){
+          // 既存JSに完全委譲（色分け・音声も元通り）
+          $("caregiver-input").value=txt;
+          $("send-caregiver")?.click();
+        }else{
+          translateAndShow(txt, $("translate-direction")?.value||"ja-en");
+        }
+      };
       box.appendChild(b);
     });
   }
-  $("template-start-btn")?.addEventListener("click", fillTemplatesNonCare);
+  $("template-start-btn")?.addEventListener("click", fillTemplates);
 
   // 「説明」ボタン（介護のみ活性）
   $("explain-btn")?.addEventListener("click", async ()=>{
@@ -185,6 +190,5 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 });
 </script>
-
  </body>
 </html>
