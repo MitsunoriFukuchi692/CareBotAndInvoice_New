@@ -57,7 +57,8 @@
     <div id="translatedCard" class="hidden"></div>
 
     <div style="margin:1rem 0; text-align:center;">
-      <button id="template-start-btn" class="template-start">テンプレート対話開始</button>
+      <!-- ★ 介護互換のため a に変更（旧JSが hook しやすい） -->
+      <a href="#" id="template-start-btn" class="template-start btn">テンプレート対話開始</a>
       <div id="template-buttons"></div>
     </div>
 
@@ -92,7 +93,7 @@
   <!-- 既存アプリJS（介護モードはこれが主役） -->
   <script src="{{ url_for('static', filename='js/chatbot.v3.g2.js') }}"></script>
 
-  <!-- 追加スクリプト：非介護モードだけ面倒を見る（介護は一切触らない） -->
+  <!-- 追加スクリプト：非介護だけ面倒を見る（介護は一切触らない） -->
   <script>
   document.addEventListener("DOMContentLoaded", () => {
     const $ = (id)=>document.getElementById(id);
@@ -163,8 +164,9 @@
     }
 
     // 非介護モード専用ボタン
-    $("translate-show-btn")?.addEventListener("click", ()=>{
+    $("translate-show-btn")?.addEventListener("click", (ev)=>{
       if (($("mode")?.value||"care")==="care") return; // 介護は既存JS
+      ev.preventDefault();
       const txt = $("caregiver-input").value.trim(); if(!txt) return;
       translateAndShow(txt, $("translate-direction")?.value || "ja-en");
     });
@@ -184,13 +186,14 @@
     ];
 
     document.getElementById("template-start-btn")?.addEventListener("click", (e)=>{
-      // 介護では“何もしない”→既存JSのハンドラに任せる
-      if (($("mode")?.value||"care")==="care") return;
-
+      const mode = ($("mode")?.value || "care");
+      if (mode === "care") {
+        // ★ 介護は何もしない（旧JSがこの a をフックして処理）
+        return;
+      }
       // 非介護のみ：こちらでテンプレ生成
-      e.preventDefault(); e.stopPropagation();
-      const m = $("mode").value;
-      const items = (m === "tour") ? TOUR : LANG;
+      e.preventDefault();
+      const items = (mode === "tour") ? TOUR : LANG;
       const box = $("template-buttons"); if (!box) return;
       box.innerHTML = "";
       items.forEach(txt=>{
@@ -202,8 +205,9 @@
     });
 
     // 説明ボタン（介護のみ活性）
-    $("explain-btn")?.addEventListener("click", async ()=>{
+    $("explain-btn")?.addEventListener("click", async (ev)=>{
       if (($("mode")?.value||"care")!=="care") return;
+      ev.preventDefault();
       const term = ($("term")?.value||"").trim(); if(!term) return;
       try{
         const r = await fetch("/ja/explain", {
