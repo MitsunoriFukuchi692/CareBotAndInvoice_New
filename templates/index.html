@@ -3,9 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>介護支援ボット / 翻訳学習・観光モード</title>
+  <title>AIみまくん＋インボイスデモ</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
   <style>
+    /* 最低限の体裁（任意） */
     .chat-title{ text-align:center; margin:1rem 0; }
     #chat-window{ border:1px solid #ddd; border-radius:8px; min-height:180px; padding:8px; margin:8px 0; }
     .input-panel{ display:grid; grid-template-columns:1fr auto auto; gap:8px; align-items:center; }
@@ -13,15 +14,12 @@
     .template-start{ margin:0.5rem auto; display:inline-block; }
     #template-buttons{ display:flex; flex-wrap:wrap; gap:6px; justify-content:center; margin-bottom:8px; }
     .action-buttons{ display:flex; gap:8px; justify-content:center; margin-top:12px; }
-    .toolbar{ display:flex; flex-wrap:wrap; gap:.5rem; align-items:center; justify-content:center; margin:.75rem 0; }
-    .hidden{ display:none !important; }
-    #translatedCard{ font-size:1.6rem; line-height:1.6; border:1px solid #ddd; border-radius:8px; padding:12px; margin-top:8px; min-height:3.5em; }
   </style>
 </head>
 <body>
   <header>
     <nav style="display:flex; justify-content:center; gap:1rem; margin:1rem 0;">
-      <a href="https://robostudy.jp/" class="btn btn-outline-primary">🔙 戻る</a>
+      <a href="https://robostudy.jp/test/index.html" class="btn btn-outline-primary">🔙 戻る</a>
       <a href="/camera-test/" class="btn btn-outline-secondary" target="_blank" rel="noopener">カメラテスト</a>
       <a href="/daily_report" class="btn btn-outline-secondary" target="_blank" rel="noopener">見守りレポート</a>
     </nav>
@@ -30,41 +28,16 @@
   <main>
     <h2 class="chat-title">介護支援ボット</h2>
 
-    <!-- モード/言語ツールバー -->
-    <div class="toolbar">
-      <label for="mode">モード:</label>
-      <select id="mode">
-        <option value="care" selected>介護</option>
-        <option value="lang">翻訳学習</option>
-        <option value="tour">観光案内</option>
-      </select>
-
-      <label for="translate-direction">翻訳方向:</label>
-      <select id="translate-direction">
-        <option value="ja-en" selected>日本語→英語</option>
-        <option value="en-ja">英語→日本語</option>
-        <option value="ja-vi">日本語→ベトナム語</option>
-        <option value="vi-ja">ベトナム語→日本語</option>
-        <option value="ja-tl">日本語→タガログ語</option>
-        <option value="tl-ja">タガログ語→日本語</option>
-      </select>
-
-      <!-- 非介護モード専用ボタン -->
-      <button id="translate-show-btn" type="button" class="btn">翻訳して表示</button>
-    </div>
-
-    <!-- 訳文カード（lang/tourでのみ表示） -->
-    <div id="translatedCard" class="hidden"></div>
-
-    <div style="margin:1rem 0; text-align:center;">
-      <!-- ★ 介護互換のため a に変更（旧JSが hook しやすい） -->
-      <a href="#" id="template-start-btn" class="template-start btn">テンプレート対話開始</a>
+    <!-- テンプレ会話 -->
+    <div style="margin: 1rem 0; text-align: center;">
+      <button id="template-start-btn" class="template-start">テンプレート対話開始</button>
       <div id="template-buttons"></div>
     </div>
 
+    <!-- 会話表示 -->
     <div id="chat-window"></div>
 
-    <!-- 従来構造そのまま：介護は既存JSが制御 -->
+    <!-- 入力エリア（onclick廃止、IDで結線） -->
     <div class="input-panel">
       <label class="role-label caregiver" for="caregiver-input">介護士</label>
       <input id="caregiver-input" type="text" placeholder="介護士の発言を入力" />
@@ -77,151 +50,36 @@
       <button id="send-caree" type="button">送信</button>
     </div>
 
-    <!-- 用語説明（介護モードのみ表示） -->
+    <!-- 用語説明 -->
     <section id="glossary" style="margin-top:16px;">
       <input type="text" id="term" placeholder="用語を入力" />
       <button id="explain-btn" type="button">説明</button>
       <p id="explanation"></p>
     </section>
 
+    <!-- 翻訳（サーバーTTSで読み上げ） -->
+    <section id="translation-panel">
+      <select id="translate-direction">
+        <option value="ja-en" selected>日本語→英語</option>
+        <option value="en-ja">英語→日本語</option>
+        <option value="ja-vi">日本語→ベトナム語</option>
+        <option value="vi-ja">ベトナム語→日本語</option>
+        <option value="ja-tl">日本語→タガログ語</option>
+        <option value="tl-ja">タガログ語→日本語</option>
+      </select>
+      <button id="translate-btn" type="button">翻訳して読み上げ</button>
+      <p id="translation-result"></p>
+    </section>
+
+    <!-- アクション -->
     <div class="action-buttons">
       <button id="save-log-btn" type="button">会話ログ保存</button>
       <a class="btn" href="/daily_report" target="_blank" rel="noopener">📝 日報を生成</a>
     </div>
   </main>
 
-  <!-- 既存アプリJS（介護モードはこれが主役） -->
+    <!-- 最新JSを必ず読むためにクエリでキャッシュ無効化 -->
   <script src="{{ url_for('static', filename='js/chatbot.v3.g2.js') }}"></script>
-
-  <!-- 追加スクリプト：非介護だけ面倒を見る（介護は一切触らない） -->
-  <script>
-  document.addEventListener("DOMContentLoaded", () => {
-    const $ = (id)=>document.getElementById(id);
-
-    // --- UI切替（責務分離） ---
-    function applyMode(){
-      const m = $("mode")?.value || "care";
-      const isCare = (m === "care");
-
-      document.querySelector('label[for="caregiver-input"]').textContent =
-        isCare ? "介護士" : "話す人（日本人/外国人）";
-
-      // 被介護者行の表示/非表示
-      const careeLabel = document.querySelector('label[for="caree-input"]');
-      [careeLabel,$("caree-input"),$("mic-caree"),$("send-caree")]
-        .forEach(el => el?.classList.toggle("hidden", !isCare));
-      $("caree-input").disabled = !isCare;
-
-      // 非介護UIの表示/非表示
-      $("translatedCard")?.classList.toggle("hidden", isCare);
-      $("translate-show-btn")?.classList.toggle("hidden", isCare);
-
-      // 介護専用UI（ログ保存・日報／用語説明）は非介護で隠す
-      document.querySelector(".action-buttons")?.classList.toggle("hidden", !isCare);
-      $("glossary")?.classList.toggle("hidden", !isCare);
-    }
-    $("mode")?.addEventListener("change", applyMode);
-    applyMode(); // 初期は care
-
-    // --- 非介護：翻訳→音声 ---
-    function ttsLangFrom(pair){
-      const p=(pair||"ja-en").toLowerCase();
-      if (p==="ja-en") return "en-US";
-      if (p==="en-ja") return "ja-JP";
-      if (p==="ja-vi") return "vi-VN";
-      if (p==="vi-ja") return "ja-JP";
-      if (p==="ja-tl") return "fil-PH";
-      if (p==="tl-ja") return "ja-JP";
-      return "ja-JP";
-    }
-    async function translateAndShow(text, pair){
-      const dir = pair || "ja-en";
-      try{
-        const r = await fetch("/ja/translate",{
-          method:"POST", headers:{"Content-Type":"application/json"},
-          body: JSON.stringify({ text, direction: dir })
-        });
-        if(!r.ok) throw new Error("translate http "+r.status);
-        const data = await r.json();
-        const translated = data.translated || "";
-        $("translatedCard").textContent = translated || "（訳文なし）";
-
-        if (translated){
-          const t = await fetch("/tts", {
-            method:"POST", headers:{"Content-Type":"application/json"},
-            body: JSON.stringify({ text: translated, lang: ttsLangFrom(dir) })
-          });
-          if (t.ok){
-            const blob = await t.blob();
-            const url  = URL.createObjectURL(blob);
-            new Audio(url).play();
-          }
-        }
-      }catch(e){
-        console.error(e);
-        $("translatedCard").textContent = "翻訳エラーが発生しました。";
-      }
-    }
-
-    // 非介護モード専用ボタン
-    $("translate-show-btn")?.addEventListener("click", (ev)=>{
-      if (($("mode")?.value||"care")==="care") return; // 介護は既存JS
-      ev.preventDefault();
-      const txt = $("caregiver-input").value.trim(); if(!txt) return;
-      translateAndShow(txt, $("translate-direction")?.value || "ja-en");
-    });
-
-    // --- 非介護テンプレ（介護では一切生成しない。介護は既存JSに委譲） ---
-    const LANG = [
-      "おはようございます（Good morning）",
-      "ありがとうございます（Thank you）",
-      "ゆっくり話してください（Please speak slowly）",
-      "もう一度お願いします（One more time, please）"
-    ];
-    const TOUR = [
-      "駅はどちらですか？",
-      "この近くのおすすめは？",
-      "いくらですか？カード使えますか？",
-      "助けてください。道に迷いました。"
-    ];
-
-    document.getElementById("template-start-btn")?.addEventListener("click", (e)=>{
-      const mode = ($("mode")?.value || "care");
-      if (mode === "care") {
-        // ★ 介護は何もしない（旧JSがこの a をフックして処理）
-        return;
-      }
-      // 非介護のみ：こちらでテンプレ生成
-      e.preventDefault();
-      const items = (mode === "tour") ? TOUR : LANG;
-      const box = $("template-buttons"); if (!box) return;
-      box.innerHTML = "";
-      items.forEach(txt=>{
-        const b = document.createElement("button");
-        b.className = "btn"; b.textContent = txt;
-        b.onclick = ()=>translateAndShow(txt, $("translate-direction")?.value || "ja-en");
-        box.appendChild(b);
-      });
-    });
-
-    // 説明ボタン（介護のみ活性）
-    $("explain-btn")?.addEventListener("click", async (ev)=>{
-      if (($("mode")?.value||"care")!=="care") return;
-      ev.preventDefault();
-      const term = ($("term")?.value||"").trim(); if(!term) return;
-      try{
-        const r = await fetch("/ja/explain", {
-          method:"POST", headers:{"Content-Type":"application/json"},
-          body: JSON.stringify({ term })
-        });
-        const data = await r.json();
-        $("explanation").textContent = data.explanation || "説明を取得しました。";
-      }catch(e){
-        console.error(e);
-        $("explanation").textContent = "説明取得でエラー";
-      }
-    });
-  });
-  </script>
 </body>
 </html>
+
