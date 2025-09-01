@@ -81,12 +81,4 @@
   <!-- 最新JSを必ず読むためにクエリでキャッシュ無効化 -->
   <script src="{{ url_for('static', filename='js/chatbot.v3.g2.js') }}"></script>
 </body>
-
-<div style="position:fixed;right:.5rem;bottom:.5rem;background:#0000000d;border:1px solid #0000001a;padding:.25rem .5rem;border-radius:.5rem;font:12px/1.2 system-ui,sans-serif;">
-  v: {{ version_info.service }} / {{ version_info.git or "nogit" }} / {{ version_info.built }}
-  <a href="/version" style="margin-left:.25rem;opacity:.7;text-decoration:none;">json</a>
-  <a href="/healthz" style="margin-left:.25rem;opacity:.7;text-decoration:none;">health</a>
-  <a href="/readyz"  style="margin-left:.25rem;opacity:.7;text-decoration:none;">ready</a>
-</div>
-
 </html>
