@@ -30,7 +30,7 @@
   <main>
     <h2 class="chat-title">介護支援ボット</h2>
 
-    <!-- モード/言語ツールバー（バックエンド改修不要） -->
+    <!-- モード/言語ツールバー -->
     <div class="toolbar">
       <label for="mode">モード:</label>
       <select id="mode">
@@ -92,12 +92,12 @@
   <!-- 既存アプリJS（介護モードはこれが主役） -->
   <script src="{{ url_for('static', filename='js/chatbot.v3.g2.js') }}"></script>
 
-  <!-- 追加スクリプト：非介護モードのUIと翻訳/音声のみ担当（介護は一切触らない） -->
+  <!-- 追加スクリプト：非介護モードだけ面倒を見る（介護は一切触らない） -->
   <script>
   document.addEventListener("DOMContentLoaded", () => {
     const $ = (id)=>document.getElementById(id);
 
-    // --- UI 切替（責務分離：介護＝既存JS、非介護＝このスクリプト） ---
+    // --- UI切替（責務分離） ---
     function applyMode(){
       const m = $("mode")?.value || "care";
       const isCare = (m === "care");
@@ -118,15 +118,6 @@
       // 介護専用UI（ログ保存・日報／用語説明）は非介護で隠す
       document.querySelector(".action-buttons")?.classList.toggle("hidden", !isCare);
       $("glossary")?.classList.toggle("hidden", !isCare);
-
-      // テンプレイベントは非介護のときだけ付ける（介護は既存JSに委譲）
-      if (isCare) {
-        unbindNonCareTemplate();
-        // モード切替でテンプレ残骸があればクリア
-        const box = $("template-buttons"); if (box) box.innerHTML = "";
-      } else {
-        bindNonCareTemplate();
-      }
     }
     $("mode")?.addEventListener("change", applyMode);
     applyMode(); // 初期は care
@@ -170,13 +161,15 @@
         $("translatedCard").textContent = "翻訳エラーが発生しました。";
       }
     }
+
+    // 非介護モード専用ボタン
     $("translate-show-btn")?.addEventListener("click", ()=>{
-      if (($("mode")?.value||"care")==="care") return; // 介護は触らない
+      if (($("mode")?.value||"care")==="care") return; // 介護は既存JS
       const txt = $("caregiver-input").value.trim(); if(!txt) return;
       translateAndShow(txt, $("translate-direction")?.value || "ja-en");
     });
 
-    // --- 非介護テンプレ（介護では一切テンプレを生成しない） ---
+    // --- 非介護テンプレ（介護では一切生成しない。介護は既存JSに委譲） ---
     const LANG = [
       "おはようございます（Good morning）",
       "ありがとうございます（Thank you）",
@@ -190,10 +183,13 @@
       "助けてください。道に迷いました。"
     ];
 
-    let nonCareHandler = null;
-    function renderTemplatesNonCare(){
-      const m = $("mode")?.value || "care";
-      if (m === "care") return; // 介護は既存JSに委譲
+    document.getElementById("template-start-btn")?.addEventListener("click", (e)=>{
+      // 介護では“何もしない”→既存JSのハンドラに任せる
+      if (($("mode")?.value||"care")==="care") return;
+
+      // 非介護のみ：こちらでテンプレ生成
+      e.preventDefault(); e.stopPropagation();
+      const m = $("mode").value;
       const items = (m === "tour") ? TOUR : LANG;
       const box = $("template-buttons"); if (!box) return;
       box.innerHTML = "";
@@ -203,17 +199,7 @@
         b.onclick = ()=>translateAndShow(txt, $("translate-direction")?.value || "ja-en");
         box.appendChild(b);
       });
-    }
-    function bindNonCareTemplate(){
-      if (nonCareHandler) return;
-      nonCareHandler = renderTemplatesNonCare;
-      $("template-start-btn")?.addEventListener("click", nonCareHandler);
-    }
-    function unbindNonCareTemplate(){
-      if (!nonCareHandler) return;
-      $("template-start-btn")?.removeEventListener("click", nonCareHandler);
-      nonCareHandler = null;
-    }
+    });
 
     // 説明ボタン（介護のみ活性）
     $("explain-btn")?.addEventListener("click", async ()=>{
