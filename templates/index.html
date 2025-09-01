@@ -13,7 +13,7 @@
     .template-start{ margin:0.5rem auto; display:inline-block; }
     #template-buttons{ display:flex; flex-wrap:wrap; gap:6px; justify-content:center; margin-bottom:8px; }
     .action-buttons{ display:flex; gap:8px; justify-content:center; margin-top:12px; }
-    .toolbar{ display:flex; flex-wrap:wrap; gap:.5rem; align-items:center; justify-content:center; margin: .75rem 0; }
+    .toolbar{ display:flex; flex-wrap:wrap; gap:.5rem; align-items:center; justify-content:center; margin:.75rem 0; }
     .hidden{ display:none !important; }
     #translatedCard{ font-size:1.6rem; line-height:1.6; border:1px solid #ddd; border-radius:8px; padding:12px; margin-top:8px; min-height:3.5em; }
   </style>
@@ -49,21 +49,21 @@
         <option value="tl-ja">タガログ語→日本語</option>
       </select>
 
-      <!-- 非介護モードで使う専用ボタン。既存の送信処理とは分離 -->
+      <!-- 非介護モード専用ボタン -->
       <button id="translate-show-btn" type="button" class="btn">翻訳して表示</button>
     </div>
 
-    <!-- 翻訳表示用の大きいカード（lang/tourで表示、careでは隠す） -->
+    <!-- 訳文カード（lang/tourでのみ表示） -->
     <div id="translatedCard" class="hidden"></div>
 
-    <div style="margin: 1rem 0; text-align: center;">
+    <div style="margin:1rem 0; text-align:center;">
       <button id="template-start-btn" class="template-start">テンプレート対話開始</button>
       <div id="template-buttons"></div>
     </div>
 
     <div id="chat-window"></div>
 
-    <!-- 既存のID/構造は変更しない：介護モードでは従来どおり動く -->
+    <!-- 既存構造そのまま：介護モードは従来どおり -->
     <div class="input-panel">
       <label class="role-label caregiver" for="caregiver-input">介護士</label>
       <input id="caregiver-input" type="text" placeholder="介護士の発言を入力" />
@@ -76,6 +76,7 @@
       <button id="send-caree" type="button">送信</button>
     </div>
 
+    <!-- 用語説明（介護モードのみ表示） -->
     <section id="glossary" style="margin-top:16px;">
       <input type="text" id="term" placeholder="用語を入力" />
       <button id="explain-btn" type="button">説明</button>
@@ -91,116 +92,131 @@
   <!-- 既存のアプリJSはそのまま -->
   <script src="{{ url_for('static', filename='js/chatbot.v3.g2.js') }}"></script>
 
-  <!-- 追加スクリプト：UIの切替と翻訳表示だけ担当（既存処理は触らない） -->
+  <!-- 追加スクリプト：UI切替＆翻訳/音声（既存処理は触らない） -->
   <script>
-document.addEventListener("DOMContentLoaded", () => {
-  const $ = (id)=>document.getElementById(id);
+  document.addEventListener("DOMContentLoaded", () => {
+    const $ = (id)=>document.getElementById(id);
 
-  function applyMode(){
-    const m = $("mode")?.value || "care";
-    const isCare = m==="care";
-    document.querySelector('label[for="caregiver-input"]').textContent = isCare ? "介護士" : "話す人（日本人/外国人）";
-    document.querySelector('label[for="caree-input"]').textContent     = isCare ? "被介護者" : "翻訳表示";
-    $("translatedCard")?.classList.toggle("hidden", isCare);
-    $("translate-show-btn")?.classList.toggle("hidden", isCare);
-    $("caree-input").disabled = !isCare;
-    $("send-caree")?.classList.toggle("hidden", !isCare);
-    document.querySelector(".action-buttons")?.classList.toggle("hidden", !isCare);
-  }
-  $("mode")?.addEventListener("change", applyMode);
-  applyMode();
+    function applyMode(){
+      const m = $("mode")?.value || "care";
+      const isCare = (m === "care");
 
-  // TTS用: 翻訳方向→音声言語
-  function ttsLangFrom(pair){
-    const p = (pair||"ja-en").toLowerCase();
-    if (p==="ja-en") return "en-US";
-    if (p==="en-ja") return "ja-JP";
-    if (p==="ja-vi") return "vi-VN";
-    if (p==="vi-ja") return "ja-JP";
-    if (p==="ja-tl") return "fil-PH";
-    if (p==="tl-ja") return "ja-JP";
-    return "ja-JP";
-  }
+      // ラベル（careのみ従来表記）
+      document.querySelector('label[for="caregiver-input"]').textContent =
+        isCare ? "介護士" : "話す人（日本人/外国人）";
 
-  // 正しいエンドポイントで翻訳→音声
-  async function translateAndShow(text, pair){
-    const dir = pair || "ja-en";
-    try{
-      // ① 翻訳
-      const r = await fetch("/ja/translate", {
-        method:"POST", headers:{ "Content-Type":"application/json" },
-        body: JSON.stringify({ text, direction: dir })
-      });
-      if(!r.ok){ throw new Error("translate http "+r.status); }
-      const data = await r.json();
-      const translated = data.translated || "";
-      $("translatedCard").textContent = translated || "（訳文なし）";
+      // ▼ 非介護モードでは「翻訳表示（被介護者行）」を丸ごと隠す
+      const careeLabel = document.querySelector('label[for="caree-input"]');
+      [careeLabel, $("caree-input"), $("mic-caree"), $("send-caree")]
+        .forEach(el => el?.classList.toggle("hidden", !isCare));
+      $("caree-input").disabled = !isCare;
 
-      // ② 音声（任意）
-      if (translated){
-        const t = await fetch("/tts", {
+      // 訳文カード＆翻訳実行ボタンは非介護モードのみ
+      $("translatedCard")?.classList.toggle("hidden", isCare);
+      $("translate-show-btn")?.classList.toggle("hidden", isCare);
+
+      // 介護専用（ログ保存・日報／用語説明）は非介護モードで隠す
+      document.querySelector(".action-buttons")?.classList.toggle("hidden", !isCare);
+      $("glossary")?.classList.toggle("hidden", !isCare);
+    }
+    $("mode")?.addEventListener("change", applyMode);
+    applyMode();
+
+    // TTS用: 翻訳方向→音声言語
+    function ttsLangFrom(pair){
+      const p = (pair||"ja-en").toLowerCase();
+      if (p==="ja-en") return "en-US";
+      if (p==="en-ja") return "ja-JP";
+      if (p==="ja-vi") return "vi-VN";
+      if (p==="vi-ja") return "ja-JP";
+      if (p==="ja-tl") return "fil-PH";
+      if (p==="tl-ja") return "ja-JP";
+      return "ja-JP";
+    }
+
+    // 翻訳→音声（サーバの既存APIを使用）
+    async function translateAndShow(text, pair){
+      const dir = pair || "ja-en";
+      try{
+        const r = await fetch("/ja/translate", {
           method:"POST", headers:{ "Content-Type":"application/json" },
-          body: JSON.stringify({ text: translated, lang: ttsLangFrom(dir) })
+          body: JSON.stringify({ text, direction: dir })
         });
-        if (t.ok){
-          const blob = await t.blob();
-          const url  = URL.createObjectURL(blob);
-          new Audio(url).play();
+        if(!r.ok) throw new Error("translate http " + r.status);
+        const data = await r.json();
+        const translated = data.translated || "";
+        $("translatedCard").textContent = translated || "（訳文なし）";
+
+        if (translated){
+          const t = await fetch("/tts", {
+            method:"POST", headers:{ "Content-Type":"application/json" },
+            body: JSON.stringify({ text: translated, lang: ttsLangFrom(dir) })
+          });
+          if (t.ok){
+            const blob = await t.blob();
+            const url  = URL.createObjectURL(blob);
+            new Audio(url).play();
+          }
         }
+      }catch(e){
+        console.error(e);
+        $("translatedCard").textContent = "翻訳エラーが発生しました。";
       }
-    }catch(e){
-      console.error(e);
-      $("translatedCard").textContent = "翻訳エラーが発生しました。";
     }
-  }
 
-  // 非介護モード専用ボタン
-  $("translate-show-btn")?.addEventListener("click", ()=>{
-    if (($("mode")?.value||"care")==="care") return;
-    const txt = $("caregiver-input").value.trim(); if(!txt) return;
-    translateAndShow(txt, $("translate-direction")?.value || "ja-en");
-  });
-
-  // 送信（care=既存/簡易表示, 他=翻訳）
-  $("send-caregiver")?.addEventListener("click", ()=>{
-    const txt = $("caregiver-input").value.trim(); if(!txt) return;
-    if (($("mode")?.value||"care")==="care"){
-      const d = document.createElement("div"); d.textContent = "介護士: " + txt;
-      $("chat-window")?.appendChild(d);
-    }else{
+    // 非介護モード専用ボタン
+    $("translate-show-btn")?.addEventListener("click", ()=>{
+      if (($("mode")?.value||"care")==="care") return;
+      const txt = $("caregiver-input").value.trim(); if(!txt) return;
       translateAndShow(txt, $("translate-direction")?.value || "ja-en");
-    }
-  });
-
-  // テンプレ（フォールバック）
-  const CARE = ["こんにちは。今日は体調はいかがですか？","お水を少し飲みましょうか？","腰の痛みは10段階でどれくらい？","トイレは大丈夫ですか？"];
-  const LANG = ["おはようございます（Good morning）","ありがとうございます（Thank you）","ゆっくり話してください（Please speak slowly）","もう一度お願いします（One more time, please）"];
-  const TOUR = ["駅はどちらですか？","この近くのおすすめは？","いくらですか？カード使えますか？","助けてください。道に迷いました。"];
-  function fillTemplates(){
-    const m = $("mode")?.value || "care";
-    const items = m==="tour" ? TOUR : (m==="lang" ? LANG : CARE);
-    const box = $("template-buttons"); if (!box) return;
-    box.innerHTML = "";
-    items.forEach(txt=>{
-      const b = document.createElement("button");
-      b.className="btn"; b.textContent=txt;
-      b.onclick = ()=>{ $("caregiver-input").value = txt; $("send-caregiver").click(); };
-      box.appendChild(b);
     });
-  }
-  $("template-start-btn")?.addEventListener("click", fillTemplates);
 
-  // 「説明」ボタン
-  $("explain-btn")?.addEventListener("click", async ()=>{
-    const term = ($("term")?.value||"").trim(); if(!term) return;
-    try{
-      const r = await fetch("/ja/explain",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({term})});
-      const data = await r.json(); $("explanation").textContent = data.explanation || "説明を取得しました。";
-    }catch(e){ console.error(e); $("explanation").textContent = "説明取得でエラー"; }
+    // 送信（care=簡易表示/既存JSに委譲、他=翻訳）
+    $("send-caregiver")?.addEventListener("click", ()=>{
+      const txt = $("caregiver-input").value.trim(); if(!txt) return;
+      if (($("mode")?.value||"care")==="care"){
+        const d = document.createElement("div");
+        d.textContent = "介護士: " + txt;
+        $("chat-window")?.appendChild(d);
+      }else{
+        translateAndShow(txt, $("translate-direction")?.value || "ja-en");
+      }
+    });
+
+    // テンプレ（フォールバック）
+    const CARE = ["こんにちは。今日は体調はいかがですか？","お水を少し飲みましょうか？","腰の痛みは10段階でどれくらい？","トイレは大丈夫ですか？"];
+    const LANG = ["おはようございます（Good morning）","ありがとうございます（Thank you）","ゆっくり話してください（Please speak slowly）","もう一度お願いします（One more time, please）"];
+    const TOUR = ["駅はどちらですか？","この近くのおすすめは？","いくらですか？カード使えますか？","助けてください。道に迷いました。"];
+    function fillTemplates(){
+      const m = $("mode")?.value || "care";
+      const items = m==="tour" ? TOUR : (m==="lang" ? LANG : CARE);
+      const box = $("template-buttons"); if (!box) return;
+      box.innerHTML = "";
+      items.forEach(txt=>{
+        const b = document.createElement("button");
+        b.className="btn"; b.textContent=txt;
+        b.onclick = ()=>{ $("caregiver-input").value = txt; $("send-caregiver").click(); };
+        box.appendChild(b);
+      });
+    }
+    $("template-start-btn")?.addEventListener("click", fillTemplates);
+
+    // 「説明」ボタン（介護モードのみ活性）
+    $("explain-btn")?.addEventListener("click", async ()=>{
+      const term = ($("term")?.value||"").trim(); if(!term) return;
+      try{
+        const r = await fetch("/ja/explain", {
+          method:"POST", headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({term})
+        });
+        const data = await r.json();
+        $("explanation").textContent = data.explanation || "説明を取得しました。";
+      }catch(e){
+        console.error(e);
+        $("explanation").textContent = "説明取得でエラー";
+      }
+    });
   });
-});
-</script>
-
-
+  </script>
 </body>
 </html>
