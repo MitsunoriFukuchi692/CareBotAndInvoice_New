@@ -14,6 +14,7 @@ from google.cloud import texttospeech
 from openai import OpenAI
 import httpx
 import openai as _o
+import io
 
 print("Using GOOGLE_APPLICATION_CREDENTIALS:", os.getenv("GOOGLE_APPLICATION_CREDENTIALS"))
 
@@ -505,6 +506,29 @@ def save_log():
     except Exception as e:
         logging.error(f"save_log error: {e}")
         return jsonify({"ok": False, "error": "write-failed"}), 500
+
+@app.post("/stt")
+def stt_transcribe():
+    try:
+        f = request.files.get("audio")
+        if not f:
+            return jsonify({"error": "audioがありません"}), 400
+        bio = io.BytesIO(f.read())
+        bio.name = f.filename or "audio.webm"  # SDKが拡張子を使うことがあるため
+
+        # OpenAI Whisper で文字起こし
+        tr = client.audio.transcriptions.create(
+            model="whisper-1",
+            file=bio
+        )
+        # SDK仕様差異を吸収
+        text = getattr(tr, "text", None)
+        if text is None and isinstance(tr, dict):
+            text = tr.get("text", "")
+        return jsonify({"text": (text or "").strip()}), 200
+    except Exception:
+        logging.exception("stt error")
+        return jsonify({"error": "STTに失敗しました"}), 500
 
 # --------------------------------
 # エントリポイント

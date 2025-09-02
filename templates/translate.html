@@ -47,6 +47,9 @@
       <button id="tx-translate" class="btn">翻訳して表示</button>
       <button id="tx-mic" class="btn">🎤 マイク</button>
       <span id="tx-mic-status"></span>
+
+      <!-- ★ 非対応ブラウザ用の録音入力（OS録音UIが開く） -->
+      <input id="tx-file" type="file" accept="audio/*" capture class="hidden" />
     </div>
 
     <div id="tx-templates" class="templates"></div>
@@ -60,7 +63,6 @@
   </div>
 
   <script>
-  // ==== 簡易テンプレ ====
   const TPL_LANG = [
     "おはようございます（Good morning）",
     "ありがとうございます（Thank you）",
@@ -77,6 +79,9 @@
   const elIn  = $('tx-input');
   const elOut = $('tx-out');
   const elAu  = $('tx-audio');
+  const elMic = $('tx-mic');
+  const elMicStatus = $('tx-mic-status');
+  const elFile = $('tx-file');
 
   function ttsLangFrom(pair){
     const p=(pair||'ja-en').toLowerCase();
@@ -101,7 +106,6 @@
     if(!text) return;
     elOut.textContent = '翻訳中…';
     try{
-      // 翻訳（サーバ側は JSON 固定で訳文のみ返す想定）
       const r = await fetch('/ja/translate', {
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ text, direction: dir })
@@ -111,7 +115,6 @@
       const t = (j.translated||'').trim();
       elOut.textContent = t || '（訳文なし）';
 
-      // 読み上げ
       if(t){
         const a = await fetch('/tts', {
           method:'POST', headers:{'Content-Type':'application/json'},
@@ -120,7 +123,7 @@
         if(a.ok){
           const b=await a.blob(); const url=URL.createObjectURL(b);
           elAu.src=url; elAu.classList.remove('hidden');
-          try{ await elAu.play(); }catch{/* 手動再生を促す */}
+          try{ await elAu.play(); }catch{/* モバイル自動再生対策 */}
         }
       }
     }catch(e){
@@ -144,26 +147,48 @@
     });
   }
 
-  // マイク（Web Speech API：iOS/Safari 互換の webkitSpeechRecognition）
+  // ===== マイク：対応ブラウザ=音声認識 / 非対応=録音アップロード =====
   let rec = null;
-  $('tx-mic').addEventListener('click', ()=>{
-    if (!('webkitSpeechRecognition' in window)) {
-      alert('このブラウザは音声入力に対応していません'); return;
+  const hasSR = ('webkitSpeechRecognition' in window);
+
+  elMic.addEventListener('click', ()=>{
+    if (hasSR){
+      if (rec){ rec.stop(); rec=null; elMicStatus.textContent=''; return; }
+      const r = new webkitSpeechRecognition();
+      rec = r;
+      r.lang = srcLangFrom($('tx-dir').value);
+      r.interimResults = false; r.continuous = false;
+      elMicStatus.textContent = '🎙️ 聞き取り中…';
+      r.onresult = (e)=>{
+        const s = Array.from(e.results).map(r=>r[0].transcript).join(' ').trim();
+        if (s){ elIn.value = s; $('tx-translate').click(); }
+      };
+      r.onend = ()=>{ elMicStatus.textContent=''; rec=null; };
+      r.onerror = ()=>{ elMicStatus.textContent=''; rec=null; };
+      r.start();
+    }else{
+      // iOS/Safari 等：OSの録音UIでファイル取得
+      elFile.click();
     }
-    if (rec){ rec.stop(); rec=null; $('tx-mic-status').textContent=''; return; }
+  });
 
-    rec = new webkitSpeechRecognition();
-    rec.lang = srcLangFrom($('tx-dir').value);
-    rec.interimResults = false; rec.continuous = false;
-    $('tx-mic-status').textContent = '🎙️ 聞き取り中…';
-
-    rec.onresult = (e)=>{
-      const s = Array.from(e.results).map(r=>r[0].transcript).join(' ').trim();
-      if (s){ $('tx-input').value = s; $('tx-translate').click(); }
-    };
-    rec.onend = ()=>{ $('tx-mic-status').textContent=''; rec=null; };
-    rec.onerror = ()=>{ $('tx-mic-status').textContent=''; rec=null; };
-    rec.start();
+  elFile.addEventListener('change', async ()=>{
+    const file = elFile.files && elFile.files[0];
+    if (!file) return;
+    elMicStatus.textContent = '📤 アップロード中…';
+    try{
+      const fd = new FormData();
+      fd.append('audio', file);
+      const res = await fetch('/stt', { method:'POST', body: fd });
+      const j = await res.json();
+      const s = (j.text||'').trim();
+      if (s){ elIn.value = s; $('tx-translate').click(); }
+      elMicStatus.textContent = '';
+      elFile.value = ''; // 同じ録音を続けて送れるようにクリア
+    }catch(e){
+      console.error(e);
+      elMicStatus.textContent = '❌ 文字起こし失敗';
+    }
   });
 
   // イベント
