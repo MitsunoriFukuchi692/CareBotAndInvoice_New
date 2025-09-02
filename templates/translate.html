@@ -4,37 +4,56 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>翻訳学習／観光案内</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
-  <style>
-    .wrap{max-width:900px;margin:0 auto;padding:12px}
-    .toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0}
-    .templates{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
-    .out{font-size:1.6rem;line-height:1.6;border:1px solid #ddd;border-radius:8px;padding:12px;min-height:3.2em}
-    .hidden{display:none!important}
-    .btn{padding:.5rem .8rem;border:1px solid #ccc;border-radius:8px;background:#fff}
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=tx-ui-20250902">
+
+    :root{
+      --brand-blue:#1a73e8;   /* 見出しの青 */
+      --brand-green:#28a745;  /* 主ボタンの緑 */
+      --chip:#f3f6f9;
+      --bd:#e5e7eb;
+      --text:#111827;
+    }
+    body{color:var(--text);}
+    .wrap{max-width:980px;margin:0 auto;padding:16px}
+    nav{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+    .link{color:var(--brand-blue);text-decoration:none;border-bottom:1px solid transparent}
+    .link:hover{border-color:var(--brand-blue)}
+    .title{margin:8px 0 14px;text-align:center;color:var(--brand-blue);font-size:2rem;font-weight:800}
+    .toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:10px 0}
+    .btn{padding:.55rem .9rem;border:1px solid var(--bd);border-radius:10px;background:#fff;cursor:pointer}
     .btn:active{transform:scale(.98)}
-    textarea{width:100%;min-height:72px}
-    #tx-mic-status{min-width:8em}
+    .btn-primary{background:var(--brand-green);border-color:var(--brand-green);color:#fff}
+    .btn-primary:hover{filter:brightness(0.95)}
+    .select, textarea{border:1px solid var(--bd);border-radius:10px;padding:.5rem .6rem}
+    .select{height:40px}
+    textarea{width:100%;min-height:110px}
+    .templates{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0}
+    .chip{background:var(--chip);border:1px solid var(--bd);border-radius:999px;padding:.4rem .7rem;cursor:pointer}
+    .chip:hover{filter:brightness(0.98)}
+    .out{font-size:1.6rem;line-height:1.7;border:1px solid var(--bd);border-radius:12px;padding:12px;min-height:3.2em;background:#fff}
+    .hint{display:block;margin-top:6px;color:#6b7280}
+    .hidden{display:none!important}
   </style>
 </head>
 <body>
   <div class="wrap">
-    <nav style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
-      <a class="btn" href="/">← 介護ボットへ戻る</a>
-      <a class="btn" href="/daily_report" target="_blank" rel="noopener">📝 見守りレポート</a>
+    <nav>
+      <a class="link" href="/">← 介護ボットへ戻る</a>
+      <a class="link" href="/daily_report" target="_blank" rel="noopener">📝 見守りレポート</a>
+      <a class="link" href="/assist">介護＋翻訳のハブ</a>
     </nav>
 
-    <h2>翻訳学習／観光案内</h2>
+    <h1 class="title">翻訳学習／観光案内</h1>
 
     <div class="toolbar">
       <label>モード:
-        <select id="tx-mode">
+        <select id="tx-mode" class="select">
           <option value="lang" selected>翻訳学習</option>
           <option value="tour">観光案内</option>
         </select>
       </label>
       <label>翻訳方向:
-        <select id="tx-dir">
+        <select id="tx-dir" class="select">
           <option value="ja-en" selected>日本語→英語</option>
           <option value="en-ja">英語→日本語</option>
           <option value="ja-vi">日本語→ベトナム語</option>
@@ -44,25 +63,26 @@
         </select>
       </label>
       <button id="tx-show-templates" class="btn">テンプレ表示</button>
-      <button id="tx-translate" class="btn">翻訳して表示</button>
-      <button id="tx-mic" class="btn">🎤 マイク</button>
-      <span id="tx-mic-status"></span>
+      <button id="tx-translate" class="btn btn-primary">翻訳して表示</button>
+      <button id="tx-mic" class="btn btn-primary">🎤 マイク</button>
+      <span id="tx-mic-status" class="hint"></span>
+      <!-- iOS等の録音アップロード用 -->
       <input id="tx-file" type="file" accept="audio/*" capture class="hidden" />
     </div>
 
     <div id="tx-templates" class="templates"></div>
 
-    <label for="tx-input">話す内容</label>
+    <label for="tx-input" class="hint">話す内容</label>
     <textarea id="tx-input" placeholder="例：おはようございます。今日はどこへ行きますか？"></textarea>
 
-    <h3>訳文</h3>
+    <h3 class="hint" style="margin-top:12px">訳文</h3>
     <div id="tx-out" class="out"></div>
-    <audio id="tx-audio" controls playsinline class="hidden"></audio>
-    <span id="tx-audio-hint"></span>
+    <audio id="tx-audio" controls playsinline class="hidden" style="margin-top:8px"></audio>
+    <span id="tx-audio-hint" class="hint"></span>
   </div>
 
   <script>
-  // ==== テンプレ ====
+  /* ===== データ/ユーティリティ ===== */
   const TPL_LANG = [
     "おはようございます（Good morning）",
     "ありがとうございます（Thank you）",
@@ -79,7 +99,7 @@
   const elIn=$('tx-input'), elOut=$('tx-out'), elAu=$('tx-audio');
   const elHint=$('tx-audio-hint'), elMic=$('tx-mic'), elMicStatus=$('tx-mic-status'), elFile=$('tx-file');
 
-  function ttsLangFrom(pair){
+  const ttsLangFrom = (pair)=>{
     const p=(pair||'ja-en').toLowerCase();
     if(p==='ja-en')return'en-US';
     if(p==='en-ja')return'ja-JP';
@@ -88,27 +108,26 @@
     if(p==='ja-tl')return'fil-PH';
     if(p==='tl-ja')return'ja-JP';
     return'ja-JP';
-  }
-  function srcLangFrom(dir){
+  };
+  const srcLangFrom = (dir)=>{
     const p=(dir||'ja-en').toLowerCase();
     if(p==='ja-en'||p==='ja-vi'||p==='ja-tl')return'ja-JP';
     if(p==='en-ja')return'en-US';
     if(p==='vi-ja')return'vi-VN';
     if(p==='tl-ja')return'fil-PH';
     return'ja-JP';
-  }
+  };
 
+  /* ===== 翻訳＋音声（/tts失敗時は端末TTS） ===== */
   async function translateAndSpeak(text, dir){
     if(!text) return;
     elOut.textContent='翻訳中…';
     try{
-      // 翻訳（サーバは {translated:"..."} を返す）
       const r=await fetch('/ja/translate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text, direction:dir})});
       if(!r.ok) throw new Error('translate '+r.status);
       const j=await r.json(); const t=(j.translated||'').trim();
       elOut.textContent=t||'（訳文なし）';
 
-      // --- 読み上げ（/tts → 失敗時は端末TTSにフォールバック） ---
       if(t){
         let ok=false;
         try{
@@ -121,7 +140,6 @@
             catch{ if(elHint){ elHint.innerHTML='▶️ タップで再生'; elHint.style.cursor='pointer'; elHint.onclick=async()=>{ try{ await elAu.play(); elHint.textContent=''; elHint.onclick=null; elHint.style.cursor=''; }catch{} }; } ok=true; }
           }
         }catch{}
-        // フォールバック：端末 TTS
         if(!ok && 'speechSynthesis' in window){
           try{
             const u=new SpeechSynthesisUtterance(t);
@@ -140,18 +158,19 @@
     }
   }
 
+  /* ===== テンプレ表示（介護ページの“小さな灰色ボタン”風） ===== */
   function renderTemplates(){
     const items=($('tx-mode').value==='tour')?TPL_TOUR:TPL_LANG;
     const box=$('tx-templates'); box.innerHTML='';
     items.forEach(s=>{
       const btn=document.createElement('button');
-      btn.className='btn'; btn.textContent=s;
+      btn.className='chip'; btn.textContent=s;
       btn.onclick=()=>{ elIn.value=s.replace(/（.*?）/,''); $('tx-translate').click(); };
       box.appendChild(btn);
     });
   }
 
-  // ===== マイク：対応=音声認識 / 非対応=iOS録音アップロード =====
+  /* ===== マイク：対応=音声認識 / 非対応=iOS録音アップロード ===== */
   let rec=null; const hasSR=('webkitSpeechRecognition' in window);
   elMic.addEventListener('click',()=>{
     if(hasSR){
@@ -177,7 +196,7 @@
     elMicStatus.textContent=''; elFile.value='';
   });
 
-  // イベント
+  /* ===== イベント ===== */
   $('tx-show-templates').addEventListener('click', renderTemplates);
   $('tx-translate').addEventListener('click',()=>{ translateAndSpeak(elIn.value.trim(), $('tx-dir').value||'ja-en'); });
   elIn.addEventListener('keydown',(e)=>{ if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){ e.preventDefault(); $('tx-translate').click(); } });
