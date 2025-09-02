@@ -47,7 +47,6 @@
       <button id="tx-translate" class="btn">翻訳して表示</button>
       <button id="tx-mic" class="btn">🎤 マイク</button>
       <span id="tx-mic-status"></span>
-      <!-- iOS/Safari向け：録音ファイルのアップロードでSTTにフォールバック -->
       <input id="tx-file" type="file" accept="audio/*" capture class="hidden" />
     </div>
 
@@ -63,7 +62,7 @@
   </div>
 
   <script>
-  // ==== 簡易テンプレ ====
+  // ==== テンプレ ====
   const TPL_LANG = [
     "おはようございます（Good morning）",
     "ありがとうございます（Thank you）",
@@ -76,14 +75,9 @@
     "いくらですか？カードは使えますか？",
     "助けてください。道に迷いました。",
   ];
-  const $ = (id)=>document.getElementById(id);
-  const elIn  = $('tx-input');
-  const elOut = $('tx-out');
-  const elAu  = $('tx-audio');
-  const elHint = $('tx-audio-hint');
-  const elMic = $('tx-mic');
-  const elMicStatus = $('tx-mic-status');
-  const elFile = $('tx-file');
+  const $=(id)=>document.getElementById(id);
+  const elIn=$('tx-input'), elOut=$('tx-out'), elAu=$('tx-audio');
+  const elHint=$('tx-audio-hint'), elMic=$('tx-mic'), elMicStatus=$('tx-mic-status'), elFile=$('tx-file');
 
   function ttsLangFrom(pair){
     const p=(pair||'ja-en').toLowerCase();
@@ -97,133 +91,96 @@
   }
   function srcLangFrom(dir){
     const p=(dir||'ja-en').toLowerCase();
-    if(p==='ja-en'||p==='ja-vi'||p==='ja-tl') return 'ja-JP';
-    if(p==='en-ja') return 'en-US';
-    if(p==='vi-ja') return 'vi-VN';
-    if(p==='tl-ja') return 'fil-PH';
-    return 'ja-JP';
+    if(p==='ja-en'||p==='ja-vi'||p==='ja-tl')return'ja-JP';
+    if(p==='en-ja')return'en-US';
+    if(p==='vi-ja')return'vi-VN';
+    if(p==='tl-ja')return'fil-PH';
+    return'ja-JP';
   }
 
   async function translateAndSpeak(text, dir){
     if(!text) return;
-    elOut.textContent = '翻訳中…';
+    elOut.textContent='翻訳中…';
     try{
-      // 翻訳（サーバは JSON で {translated: "..."} を返す想定）
-      const r = await fetch('/ja/translate', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ text, direction: dir })
-      });
+      // 翻訳（サーバは {translated:"..."} を返す）
+      const r=await fetch('/ja/translate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text, direction:dir})});
       if(!r.ok) throw new Error('translate '+r.status);
-      const j = await r.json();
-      const t = (j.translated||'').trim();
-      elOut.textContent = t || '（訳文なし）';
+      const j=await r.json(); const t=(j.translated||'').trim();
+      elOut.textContent=t||'（訳文なし）';
 
-      // 読み上げ（自動再生がブロックされたらヒントを出す）
+      // --- 読み上げ（/tts → 失敗時は端末TTSにフォールバック） ---
       if(t){
-        const a = await fetch('/tts', {
-          method:'POST', headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ text: t, lang: ttsLangFrom(dir) })
-        });
-
-        if(!a.ok){
-          elAu.classList.add('hidden');
-          if (elHint) elHint.textContent = '音声生成に失敗しました（'+a.status+'）';
-          return;
-        }
-
-        const b  = await a.blob();
-        const url = URL.createObjectURL(b);
-        elAu.src = url;
-        elAu.classList.remove('hidden');
-        if (elHint){ elHint.textContent = ''; elHint.onclick = null; elHint.style.cursor=''; }
-
-        try {
-          await elAu.play();
-        } catch (e) {
-          // Autoplayブロック：タップで再生できる導線を出す
-          if (elHint) {
-            elHint.innerHTML = '▶️ タップで再生';
-            elHint.style.cursor = 'pointer';
-            elHint.onclick = async () => {
-              try { await elAu.play(); elHint.textContent=''; elHint.onclick=null; elHint.style.cursor=''; }
-              catch {}
-            };
+        let ok=false;
+        try{
+          const a=await fetch('/tts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t, lang:ttsLangFrom(dir)})});
+          if(a.ok){
+            const b=await a.blob(); const url=URL.createObjectURL(b);
+            elAu.src=url; elAu.classList.remove('hidden');
+            if(elHint){ elHint.textContent=''; elHint.onclick=null; elHint.style.cursor=''; }
+            try{ await elAu.play(); ok=true; }
+            catch{ if(elHint){ elHint.innerHTML='▶️ タップで再生'; elHint.style.cursor='pointer'; elHint.onclick=async()=>{ try{ await elAu.play(); elHint.textContent=''; elHint.onclick=null; elHint.style.cursor=''; }catch{} }; } ok=true; }
           }
+        }catch{}
+        // フォールバック：端末 TTS
+        if(!ok && 'speechSynthesis' in window){
+          try{
+            const u=new SpeechSynthesisUtterance(t);
+            u.lang=ttsLangFrom(dir);
+            window.speechSynthesis.cancel();
+            window.speechSynthesis.speak(u);
+            if(elHint) elHint.textContent='（端末音声で再生中）';
+          }catch{ if(elHint) elHint.textContent='音声生成に失敗しました'; }
+        }else if(!ok){
+          if(elHint) elHint.textContent='音声生成に失敗しました';
         }
       }
     }catch(e){
       console.error(e);
-      elOut.textContent = '翻訳エラーが発生しました。';
+      elOut.textContent='翻訳エラーが発生しました。';
     }
   }
 
   function renderTemplates(){
-    const mode = $('tx-mode').value;
-    const items = (mode==='tour') ? TPL_TOUR : TPL_LANG;
-    const box = $('tx-templates'); box.innerHTML = '';
+    const items=($('tx-mode').value==='tour')?TPL_TOUR:TPL_LANG;
+    const box=$('tx-templates'); box.innerHTML='';
     items.forEach(s=>{
-      const btn = document.createElement('button');
-      btn.className = 'btn'; btn.textContent = s;
-      btn.onclick = ()=>{
-        elIn.value = s.replace(/（.*?）/,''); // 括弧内の英語は入力から除去
-        $('tx-translate').click();
-      };
+      const btn=document.createElement('button');
+      btn.className='btn'; btn.textContent=s;
+      btn.onclick=()=>{ elIn.value=s.replace(/（.*?）/,''); $('tx-translate').click(); };
       box.appendChild(btn);
     });
   }
 
-  // ===== マイク：対応ブラウザ=音声認識 / 非対応=録音アップロード =====
-  let rec = null;
-  const hasSR = ('webkitSpeechRecognition' in window);
-
-  elMic.addEventListener('click', ()=>{
-    if (hasSR){
-      if (rec){ rec.stop(); rec=null; elMicStatus.textContent=''; return; }
-      const r = new webkitSpeechRecognition();
-      rec = r;
-      r.lang = srcLangFrom($('tx-dir').value);
-      r.interimResults = false; r.continuous = false;
-      elMicStatus.textContent = '🎙️ 聞き取り中…';
-      r.onresult = (e)=>{
-        const s = Array.from(e.results).map(r=>r[0].transcript).join(' ').trim();
-        if (s){ elIn.value = s; $('tx-translate').click(); }
-      };
-      r.onend = ()=>{ elMicStatus.textContent=''; rec=null; };
-      r.onerror = ()=>{ elMicStatus.textContent=''; rec=null; };
+  // ===== マイク：対応=音声認識 / 非対応=iOS録音アップロード =====
+  let rec=null; const hasSR=('webkitSpeechRecognition' in window);
+  elMic.addEventListener('click',()=>{
+    if(hasSR){
+      if(rec){ rec.stop(); rec=null; elMicStatus.textContent=''; return; }
+      const r=new webkitSpeechRecognition(); rec=r;
+      r.lang=srcLangFrom($('tx-dir').value); r.interimResults=false; r.continuous=false;
+      elMicStatus.textContent='🎙️ 聞き取り中…';
+      r.onresult=(e)=>{ const s=Array.from(e.results).map(r=>r[0].transcript).join(' ').trim(); if(s){ elIn.value=s; $('tx-translate').click(); } };
+      r.onend =()=>{ elMicStatus.textContent=''; rec=null; };
+      r.onerror=()=>{ elMicStatus.textContent=''; rec=null; };
       r.start();
-    }else{
-      // iOS/Safari 等：OSの録音UIでファイル取得→/sttへ
-      elFile.click();
-    }
+    }else{ elFile.click(); }
   });
 
-  elFile.addEventListener('change', async ()=>{
-    const file = elFile.files && elFile.files[0];
-    if (!file) return;
-    elMicStatus.textContent = '📤 アップロード中…';
+  elFile.addEventListener('change',async()=>{
+    const file=elFile.files&&elFile.files[0]; if(!file)return;
+    elMicStatus.textContent='📤 アップロード中…';
     try{
-      const fd = new FormData();
-      fd.append('audio', file);
-      const res = await fetch('/stt', { method:'POST', body: fd });
-      const j = await res.json();
-      const s = (j.text||'').trim();
-      if (s){ elIn.value = s; $('tx-translate').click(); }
-      elMicStatus.textContent = '';
-      elFile.value = ''; // 同じ録音を続けて送れるようにクリア
-    }catch(e){
-      console.error(e);
-      elMicStatus.textContent = '❌ 文字起こし失敗';
-    }
+      const fd=new FormData(); fd.append('audio',file);
+      const res=await fetch('/stt',{method:'POST',body:fd}); const j=await res.json();
+      const s=(j.text||'').trim(); if(s){ elIn.value=s; $('tx-translate').click(); }
+    }catch{ elMicStatus.textContent='❌ 文字起こし失敗'; return; }
+    elMicStatus.textContent=''; elFile.value='';
   });
 
   // イベント
   $('tx-show-templates').addEventListener('click', renderTemplates);
-  $('tx-translate').addEventListener('click', ()=>{
-    translateAndSpeak(elIn.value.trim(), $('tx-dir').value || 'ja-en');
-  });
-  elIn.addEventListener('keydown', (e)=>{
-    if(e.key==='Enter' && (e.ctrlKey||e.metaKey)){ e.preventDefault(); $('tx-translate').click(); }
-  });
+  $('tx-translate').addEventListener('click',()=>{ translateAndSpeak(elIn.value.trim(), $('tx-dir').value||'ja-en'); });
+  elIn.addEventListener('keydown',(e)=>{ if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){ e.preventDefault(); $('tx-translate').click(); } });
   </script>
 </body>
 </html>
