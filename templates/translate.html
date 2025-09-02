@@ -47,8 +47,7 @@
       <button id="tx-translate" class="btn">翻訳して表示</button>
       <button id="tx-mic" class="btn">🎤 マイク</button>
       <span id="tx-mic-status"></span>
-
-      <!-- ★ 非対応ブラウザ用の録音入力（OS録音UIが開く） -->
+      <!-- iOS/Safari向け：録音ファイルのアップロードでSTTにフォールバック -->
       <input id="tx-file" type="file" accept="audio/*" capture class="hidden" />
     </div>
 
@@ -59,10 +58,12 @@
 
     <h3>訳文</h3>
     <div id="tx-out" class="out"></div>
-    <audio id="tx-audio" controls class="hidden"></audio>
+    <audio id="tx-audio" controls playsinline class="hidden"></audio>
+    <span id="tx-audio-hint"></span>
   </div>
 
   <script>
+  // ==== 簡易テンプレ ====
   const TPL_LANG = [
     "おはようございます（Good morning）",
     "ありがとうございます（Thank you）",
@@ -79,6 +80,7 @@
   const elIn  = $('tx-input');
   const elOut = $('tx-out');
   const elAu  = $('tx-audio');
+  const elHint = $('tx-audio-hint');
   const elMic = $('tx-mic');
   const elMicStatus = $('tx-mic-status');
   const elFile = $('tx-file');
@@ -106,6 +108,7 @@
     if(!text) return;
     elOut.textContent = '翻訳中…';
     try{
+      // 翻訳（サーバは JSON で {translated: "..."} を返す想定）
       const r = await fetch('/ja/translate', {
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ text, direction: dir })
@@ -115,15 +118,37 @@
       const t = (j.translated||'').trim();
       elOut.textContent = t || '（訳文なし）';
 
+      // 読み上げ（自動再生がブロックされたらヒントを出す）
       if(t){
         const a = await fetch('/tts', {
           method:'POST', headers:{'Content-Type':'application/json'},
           body: JSON.stringify({ text: t, lang: ttsLangFrom(dir) })
         });
-        if(a.ok){
-          const b=await a.blob(); const url=URL.createObjectURL(b);
-          elAu.src=url; elAu.classList.remove('hidden');
-          try{ await elAu.play(); }catch{/* モバイル自動再生対策 */}
+
+        if(!a.ok){
+          elAu.classList.add('hidden');
+          if (elHint) elHint.textContent = '音声生成に失敗しました（'+a.status+'）';
+          return;
+        }
+
+        const b  = await a.blob();
+        const url = URL.createObjectURL(b);
+        elAu.src = url;
+        elAu.classList.remove('hidden');
+        if (elHint){ elHint.textContent = ''; elHint.onclick = null; elHint.style.cursor=''; }
+
+        try {
+          await elAu.play();
+        } catch (e) {
+          // Autoplayブロック：タップで再生できる導線を出す
+          if (elHint) {
+            elHint.innerHTML = '▶️ タップで再生';
+            elHint.style.cursor = 'pointer';
+            elHint.onclick = async () => {
+              try { await elAu.play(); elHint.textContent=''; elHint.onclick=null; elHint.style.cursor=''; }
+              catch {}
+            };
+          }
         }
       }
     }catch(e){
@@ -140,7 +165,7 @@
       const btn = document.createElement('button');
       btn.className = 'btn'; btn.textContent = s;
       btn.onclick = ()=>{
-        elIn.value = s.replace(/（.*?）/,'');
+        elIn.value = s.replace(/（.*?）/,''); // 括弧内の英語は入力から除去
         $('tx-translate').click();
       };
       box.appendChild(btn);
@@ -167,7 +192,7 @@
       r.onerror = ()=>{ elMicStatus.textContent=''; rec=null; };
       r.start();
     }else{
-      // iOS/Safari 等：OSの録音UIでファイル取得
+      // iOS/Safari 等：OSの録音UIでファイル取得→/sttへ
       elFile.click();
     }
   });
