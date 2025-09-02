@@ -14,14 +14,14 @@
     .btn{padding:.5rem .8rem;border:1px solid #ccc;border-radius:8px;background:#fff}
     .btn:active{transform:scale(.98)}
     textarea{width:100%;min-height:72px}
+    #tx-mic-status{min-width:8em}
   </style>
 </head>
 <body>
   <div class="wrap">
     <nav style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
       <a class="btn" href="/">← 介護ボットへ戻る</a>
-      <a class="btn" href="/camera-test/" target="_blank" rel="noopener">カメラテスト</a>
-      <a class="btn" href="/daily_report" target="_blank" rel="noopener">見守りレポート</a>
+      <a class="btn" href="/daily_report" target="_blank" rel="noopener">📝 見守りレポート</a>
     </nav>
 
     <h2>翻訳学習／観光案内</h2>
@@ -45,6 +45,8 @@
       </label>
       <button id="tx-show-templates" class="btn">テンプレ表示</button>
       <button id="tx-translate" class="btn">翻訳して表示</button>
+      <button id="tx-mic" class="btn">🎤 マイク</button>
+      <span id="tx-mic-status"></span>
     </div>
 
     <div id="tx-templates" class="templates"></div>
@@ -54,6 +56,7 @@
 
     <h3>訳文</h3>
     <div id="tx-out" class="out"></div>
+    <audio id="tx-audio" controls class="hidden"></audio>
   </div>
 
   <script>
@@ -70,10 +73,10 @@
     "いくらですか？カードは使えますか？",
     "助けてください。道に迷いました。",
   ];
-
   const $ = (id)=>document.getElementById(id);
   const elIn  = $('tx-input');
   const elOut = $('tx-out');
+  const elAu  = $('tx-audio');
 
   function ttsLangFrom(pair){
     const p=(pair||'ja-en').toLowerCase();
@@ -85,11 +88,20 @@
     if(p==='tl-ja')return'ja-JP';
     return'ja-JP';
   }
+  function srcLangFrom(dir){
+    const p=(dir||'ja-en').toLowerCase();
+    if(p==='ja-en'||p==='ja-vi'||p==='ja-tl') return 'ja-JP';
+    if(p==='en-ja') return 'en-US';
+    if(p==='vi-ja') return 'vi-VN';
+    if(p==='tl-ja') return 'fil-PH';
+    return 'ja-JP';
+  }
 
   async function translateAndSpeak(text, dir){
     if(!text) return;
     elOut.textContent = '翻訳中…';
     try{
+      // 翻訳（サーバ側は JSON 固定で訳文のみ返す想定）
       const r = await fetch('/ja/translate', {
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ text, direction: dir })
@@ -99,12 +111,17 @@
       const t = (j.translated||'').trim();
       elOut.textContent = t || '（訳文なし）';
 
+      // 読み上げ
       if(t){
         const a = await fetch('/tts', {
           method:'POST', headers:{'Content-Type':'application/json'},
           body: JSON.stringify({ text: t, lang: ttsLangFrom(dir) })
         });
-        if(a.ok){ const b=await a.blob(); const url=URL.createObjectURL(b); new Audio(url).play(); }
+        if(a.ok){
+          const b=await a.blob(); const url=URL.createObjectURL(b);
+          elAu.src=url; elAu.classList.remove('hidden');
+          try{ await elAu.play(); }catch{/* 手動再生を促す */}
+        }
       }
     }catch(e){
       console.error(e);
@@ -119,11 +136,37 @@
     items.forEach(s=>{
       const btn = document.createElement('button');
       btn.className = 'btn'; btn.textContent = s;
-      btn.onclick = ()=>{ elIn.value = s.replace(/（.*?）/,''); $('tx-translate').click(); };
+      btn.onclick = ()=>{
+        elIn.value = s.replace(/（.*?）/,'');
+        $('tx-translate').click();
+      };
       box.appendChild(btn);
     });
   }
 
+  // マイク（Web Speech API：iOS/Safari 互換の webkitSpeechRecognition）
+  let rec = null;
+  $('tx-mic').addEventListener('click', ()=>{
+    if (!('webkitSpeechRecognition' in window)) {
+      alert('このブラウザは音声入力に対応していません'); return;
+    }
+    if (rec){ rec.stop(); rec=null; $('tx-mic-status').textContent=''; return; }
+
+    rec = new webkitSpeechRecognition();
+    rec.lang = srcLangFrom($('tx-dir').value);
+    rec.interimResults = false; rec.continuous = false;
+    $('tx-mic-status').textContent = '🎙️ 聞き取り中…';
+
+    rec.onresult = (e)=>{
+      const s = Array.from(e.results).map(r=>r[0].transcript).join(' ').trim();
+      if (s){ $('tx-input').value = s; $('tx-translate').click(); }
+    };
+    rec.onend = ()=>{ $('tx-mic-status').textContent=''; rec=null; };
+    rec.onerror = ()=>{ $('tx-mic-status').textContent=''; rec=null; };
+    rec.start();
+  });
+
+  // イベント
   $('tx-show-templates').addEventListener('click', renderTemplates);
   $('tx-translate').addEventListener('click', ()=>{
     translateAndSpeak(elIn.value.trim(), $('tx-dir').value || 'ja-en');

@@ -4,6 +4,7 @@
 import os, sys, glob, logging, tempfile, mimetypes, uuid, datetime
 from pathlib import Path
 from io import BytesIO
+from flask import send_file
 
 from flask import Flask, render_template, request, jsonify, send_from_directory, send_file, url_for
 from flask_cors import CORS
@@ -42,6 +43,7 @@ for d in (UPLOAD_DIR, VIDEO_DIR, LOG_DIR):
 # APIキーなど
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 client = OpenAI(api_key=OPENAI_API_KEY)
+tts_client = texttospeech.TextToSpeechClient()
 
 # --------------------------------
 # /version /healthz /readyz /__test__（ここで一括定義）
@@ -81,6 +83,10 @@ def readyz():
 @app.route("/__test__")
 def __test__():
     return "__test__ ok", 200
+
+@app.get("/translate")
+def translate_page():
+    return render_template("translate.html")
 
 # --------------------------------
 # 共通ユーティリティ
@@ -364,35 +370,38 @@ def explain_term():
 # --------------------------------
 # 翻訳
 # --------------------------------
+import re
+
 @app.post("/ja/translate")
 def translate_text():
-    try:
-        data = request.get_json(force=True)
-        text = data.get("text", "")
-        direction = data.get("direction", "ja-en")
-        if not text:
-            return jsonify({"error": "翻訳するテキストがありません"}), 400
+    data = request.get_json(force=True) or {}
+    text = (data.get("text") or "").trim() if hasattr(str, "trim") else (data.get("text") or "").strip()
+    direction = (data.get("direction") or "ja-en").lower()
+    if not text:
+        return jsonify({"error":"翻訳するテキストがありません"}), 400
 
-        if   direction == "ja-en": sys_prompt = "次の日本語を英語に翻訳してください。"
-        elif direction == "en-ja": sys_prompt = "次の英語を日本語に翻訳してください。"
-        elif direction == "ja-vi": sys_prompt = "次の日本語をベトナム語に翻訳してください。"
-        elif direction == "vi-ja": sys_prompt = "次のベトナム語を日本語に翻訳してください。"
-        elif direction == "ja-tl": sys_prompt = "次の日本語をタガログ語に翻訳してください。"
-        elif direction == "tl-ja": sys_prompt = "次のタガログ語を日本語に翻訳してください。"
-        else:
-            return jsonify({"error": f"未対応の翻訳方向: {direction}"}), 400
+    sys_map = {
+        "ja-en":"あなたは厳密な翻訳エンジンです。出力は翻訳文のみ。日本語→英語に翻訳せよ。",
+        "en-ja":"あなたは厳密な翻訳エンジンです。出力は翻訳文のみ。英語→日本語に翻訳せよ。",
+        "ja-vi":"Bạn là công cụ dịch nghiêm ngặt. Chỉ xuất bản dịch. Dịch Nhật→Việt.",
+        "vi-ja":"Bạn là công cụ dịch nghiêm ngặt. Chỉ xuất bản dịch. Dịch Việt→Nhật.",
+        "ja-tl":"Ikaw ay mahigpit na tagapagsalin. Ibigay lamang ang salin. Isalin Hapon→Tagalog.",
+        "tl-ja":"Ikaw ay mahigpit na tagapagsalin. Ibigay lamang ang salin. Isalin Tagalog→Hapon.",
+    }
+    if direction not in sys_map:
+        return jsonify({"error": f"未対応の翻訳方向: {direction}"}), 400
 
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "system", "content": sys_prompt},
-                      {"role": "user", "content": text}],
-            max_tokens=200
-        )
-        translated = (response.choices[0].message.content or "").strip()
-        return jsonify({"translated": translated})
-    except Exception as e:
-        logging.error(f"翻訳エラー: {e}")
-        return jsonify({"error": "翻訳に失敗しました"}), 500
+    resp = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role":"system","content":sys_map[direction]},
+                  {"role":"user","content":text}],
+        temperature=0, max_tokens=256,
+    )
+    out = (resp.choices[0].message.content or "").strip()
+    out = out.strip("`")
+    out = re.sub(r'^(英訳|和訳|訳|translation|output)\s*[:：]\s*','', out, flags=re.I)
+    out = out.splitlines()[0].strip()
+    return jsonify({"translated": out})
 
 # --------------------------------
 # TTS（Google Text-to-Speech）
@@ -451,7 +460,6 @@ def tts():
     if not text: return jsonify({"error": "読み上げるテキストがありません"}), 400
 
     try:
-        client_tts = texttospeech.TextToSpeechClient()
         audio = _synthesize_mp3(client_tts, text, lang, voice, rate, pitch, vol)
         return (audio, 200, {
             "Content-Type": "audio/mpeg",
@@ -497,11 +505,6 @@ def save_log():
     except Exception as e:
         logging.error(f"save_log error: {e}")
         return jsonify({"ok": False, "error": "write-failed"}), 500
-
-# --- 追加: 翻訳ページ ---
-@app.get("/translate")
-def translate_page():
-    return render_template("translate.html")
 
 # --------------------------------
 # エントリポイント
