@@ -498,6 +498,11 @@ def save_log():
         logging.error(f"save_log error: {e}")
         return jsonify({"ok": False, "error": "write-failed"}), 500
 
+# --- 追加: 翻訳ページ ---
+@app.get("/translate")
+def translate_page():
+    return render_template("translate.html")
+
 # --------------------------------
 # エントリポイント
 # --------------------------------
