@@ -1,4 +1,5 @@
-# app.py — carebotandinvoice-v2 本番用（バージョン表示とredy出力を削除版）
+# app.py — carebotandinvoice-v2 本番用（重複整理版）
+# 右下バッジ用の /version、ヘルス /healthz・/readyz、デバッグ /__test__ も1か所で定義
 
 import os, sys, glob, logging, tempfile, mimetypes, uuid, datetime
 from pathlib import Path
@@ -43,20 +44,39 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 client = OpenAI(api_key=OPENAI_API_KEY)
 
 # --------------------------------
-# /healthz /readyz /__test__（バージョン表示削除済み）
+# /version /healthz /readyz /__test__（ここで一括定義）
 # --------------------------------
+from flask import jsonify  # 局所import可
+
+STARTED_AT = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+VERSION_INFO = {
+    "service": os.getenv("SERVICE_NAME", "carebotandinvoice-v2"),
+    "git": (os.getenv("GIT_SHA") or os.getenv("RENDER_GIT_COMMIT", ""))[:7],
+    "built": os.getenv("BUILD_TIME", STARTED_AT),
+    "env": os.getenv("RENDER_SERVICE_NAME", ""),
+}
+
+@app.context_processor
+def inject_version_info():
+    # index.html から {{ version_info.* }} で参照
+    return dict(version_info=VERSION_INFO)
+
+@app.route("/version")
+def version():
+    return jsonify(VERSION_INFO), 200
+
 @app.route("/healthz")
 def healthz():
     return "ok", 200
 
 @app.route("/readyz")
 def readyz():
-    required = []
+    # 依存先チェックが必要なら required にENV名を列挙
+    required = []  # 例: ["SUPABASE_URL", "SUPABASE_KEY"]
     missing = [k for k in required if not os.getenv(k)]
     if missing:
         return jsonify({"ready": False, "missing_env": missing}), 503
-    # デバッグ用の {"ready": true} を削除 → 204だけ返す
-    return ("", 204)
+    return jsonify({"ready": True}), 200
 
 @app.route("/__test__")
 def __test__():
@@ -79,6 +99,7 @@ def _safe_list_media(dir_path: Path, exts: set[str]) -> list[str]:
         logging.warning(f"list_media error at {dir_path}: {e}")
     return sorted(items)
 
+# キャッシュ抑止
 @app.after_request
 def add_header(resp):
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
@@ -97,6 +118,7 @@ def index():
 @app.get("/camera-test/")
 def camera_test():
     return render_template("camera_test.html")
+
 # --------------------------------
 # 日報関連
 # --------------------------------
