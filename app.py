@@ -41,6 +41,10 @@ LOG_DIR    = BASE_DIR / "logs"
 for d in (UPLOAD_DIR, VIDEO_DIR, LOG_DIR):
     d.mkdir(parents=True, exist_ok=True)
 
+@app.get("/assist")
+def assist_hub():
+    return render_template("assist.html")
+
 # APIキーなど
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 client = OpenAI(api_key=OPENAI_API_KEY)

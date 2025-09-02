@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>介護支援＋翻訳ハブ</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  <style>
+    :root{ --gap:10px; }
+    body{ margin:0; font-family:system-ui, sans-serif; }
+    header{ padding:8px 10px; border-bottom:1px solid #eee; display:flex; gap:8px; flex-wrap:wrap; }
+    .btn{ padding:.5rem .8rem; border:1px solid #ccc; border-radius:8px; background:#fff }
+    .tabs{ display:flex; gap:8px; padding:10px; border-bottom:1px solid #eee; }
+    .tabs button{ padding:.5rem .8rem; border:1px solid #ccc; border-radius:8px; background:#fff; }
+    .tabs button.active{ background:#f2f6ff; border-color:#7aa2ff; }
+    .frame-wrap{ padding:var(--gap); }
+    iframe{ width:100%; border:1px solid #ddd; border-radius:10px; }
+    .hidden{ display:none !important; }
+  </style>
+</head>
+<body>
+  <header>
+    <a class="btn" href="/">← 介護ボット</a>
+    <a class="btn" href="/translate">翻訳学習／観光案内（単独）</a>
+  </header>
+
+  <div class="tabs">
+    <button id="tab-care" class="active">介護支援</button>
+    <button id="tab-tx">翻訳学習／観光案内</button>
+  </div>
+
+  <div class="frame-wrap">
+    <!-- 同一オリジンなので権限も継承されやすい -->
+    <iframe id="frame-care" src="/?_hub=1" allow="microphone; camera; autoplay; clipboard-read; clipboard-write" title="介護支援"></iframe>
+    <iframe id="frame-tx"   src="/translate?_hub=1" class="hidden" allow="microphone; camera; autoplay; clipboard-read; clipboard-write" title="翻訳学習／観光案内"></iframe>
+  </div>
+
+  <script>
+    const careBtn = document.getElementById('tab-care');
+    const txBtn   = document.getElementById('tab-tx');
+    const fCare   = document.getElementById('frame-care');
+    const fTx     = document.getElementById('frame-tx');
+
+    function setActive(which){
+      const onCare = (which==='care');
+      careBtn.classList.toggle('active', onCare);
+      txBtn.classList.toggle('active', !onCare);
+      fCare.classList.toggle('hidden', !onCare);
+      fTx.classList.toggle('hidden', onCare);
+      resizeFrames();
+    }
+
+    function resizeFrames(){
+      const headerH = document.querySelector('header').offsetHeight;
+      const tabsH   = document.querySelector('.tabs').offsetHeight;
+      const gap     = 10;
+      const h = Math.max(300, window.innerHeight - headerH - tabsH - gap*3);
+      fCare.style.height = h + 'px';
+      fTx.style.height   = h + 'px';
+    }
+
+    careBtn.addEventListener('click', ()=>setActive('care'));
+    txBtn.addEventListener('click',   ()=>setActive('tx'));
+    window.addEventListener('resize', resizeFrames);
+    document.addEventListener('DOMContentLoaded', resizeFrames);
+  </script>
+</body>
+</html>
