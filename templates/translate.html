@@ -4,14 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>翻訳学習／観光案内</title>
+  <!-- キャッシュバスター付き 共通CSS -->
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=tx-ui-20250902">
-
+  <!-- ここからページ専用CSS（※必ず <style>〜</style> で囲む） -->
+  <style>
     :root{
-      --brand-blue:#1a73e8;   /* 見出しの青 */
-      --brand-green:#28a745;  /* 主ボタンの緑 */
-      --chip:#f3f6f9;
-      --bd:#e5e7eb;
-      --text:#111827;
+      --brand-blue:#1a73e8;
+      --brand-green:#28a745;
+      --chip:#f3f6f9; --bd:#e5e7eb; --text:#111827;
     }
     body{color:var(--text);}
     .wrap{max-width:980px;margin:0 auto;padding:16px}
@@ -66,7 +66,6 @@
       <button id="tx-translate" class="btn btn-primary">翻訳して表示</button>
       <button id="tx-mic" class="btn btn-primary">🎤 マイク</button>
       <span id="tx-mic-status" class="hint"></span>
-      <!-- iOS等の録音アップロード用 -->
       <input id="tx-file" type="file" accept="audio/*" capture class="hidden" />
     </div>
 
@@ -82,43 +81,14 @@
   </div>
 
   <script>
-  /* ===== データ/ユーティリティ ===== */
-  const TPL_LANG = [
-    "おはようございます（Good morning）",
-    "ありがとうございます（Thank you）",
-    "ゆっくり話してください（Please speak slowly）",
-    "もう一度お願いします（One more time, please）",
-  ];
-  const TPL_TOUR = [
-    "駅はどちらですか？",
-    "この近くのおすすめは？",
-    "いくらですか？カードは使えますか？",
-    "助けてください。道に迷いました。",
-  ];
-  const $=(id)=>document.getElementById(id);
-  const elIn=$('tx-input'), elOut=$('tx-out'), elAu=$('tx-audio');
-  const elHint=$('tx-audio-hint'), elMic=$('tx-mic'), elMicStatus=$('tx-mic-status'), elFile=$('tx-file');
+  const TPL_LANG=["おはようございます（Good morning）","ありがとうございます（Thank you）","ゆっくり話してください（Please speak slowly）","もう一度お願いします（One more time, please）"];
+  const TPL_TOUR=["駅はどちらですか？","この近くのおすすめは？","いくらですか？カードは使えますか？","助けてください。道に迷いました。"];
+  const $=id=>document.getElementById(id);
+  const elIn=$('tx-input'), elOut=$('tx-out'), elAu=$('tx-audio'), elHint=$('tx-audio-hint'), elMic=$('tx-mic'), elMicStatus=$('tx-mic-status'), elFile=$('tx-file');
 
-  const ttsLangFrom = (pair)=>{
-    const p=(pair||'ja-en').toLowerCase();
-    if(p==='ja-en')return'en-US';
-    if(p==='en-ja')return'ja-JP';
-    if(p==='ja-vi')return'vi-VN';
-    if(p==='vi-ja')return'ja-JP';
-    if(p==='ja-tl')return'fil-PH';
-    if(p==='tl-ja')return'ja-JP';
-    return'ja-JP';
-  };
-  const srcLangFrom = (dir)=>{
-    const p=(dir||'ja-en').toLowerCase();
-    if(p==='ja-en'||p==='ja-vi'||p==='ja-tl')return'ja-JP';
-    if(p==='en-ja')return'en-US';
-    if(p==='vi-ja')return'vi-VN';
-    if(p==='tl-ja')return'fil-PH';
-    return'ja-JP';
-  };
+  const ttsLangFrom=(p)=>{p=(p||'ja-en').toLowerCase(); if(p==='ja-en')return'en-US'; if(p==='en-ja')return'ja-JP'; if(p==='ja-vi')return'vi-VN'; if(p==='vi-ja')return'ja-JP'; if(p==='ja-tl')return'fil-PH'; if(p==='tl-ja')return'ja-JP'; return'ja-JP';};
+  const srcLangFrom=(p)=>{p=(p||'ja-en').toLowerCase(); if(p==='ja-en'||p==='ja-vi'||p==='ja-tl')return'ja-JP'; if(p==='en-ja')return'en-US'; if(p==='vi-ja')return'vi-VN'; if(p==='tl-ja')return'fil-PH'; return'ja-JP';};
 
-  /* ===== 翻訳＋音声（/tts失敗時は端末TTS） ===== */
   async function translateAndSpeak(text, dir){
     if(!text) return;
     elOut.textContent='翻訳中…';
@@ -144,21 +114,16 @@
           try{
             const u=new SpeechSynthesisUtterance(t);
             u.lang=ttsLangFrom(dir);
-            window.speechSynthesis.cancel();
-            window.speechSynthesis.speak(u);
+            speechSynthesis.cancel(); speechSynthesis.speak(u);
             if(elHint) elHint.textContent='（端末音声で再生中）';
           }catch{ if(elHint) elHint.textContent='音声生成に失敗しました'; }
         }else if(!ok){
           if(elHint) elHint.textContent='音声生成に失敗しました';
         }
       }
-    }catch(e){
-      console.error(e);
-      elOut.textContent='翻訳エラーが発生しました。';
-    }
+    }catch(e){ console.error(e); elOut.textContent='翻訳エラーが発生しました。'; }
   }
 
-  /* ===== テンプレ表示（介護ページの“小さな灰色ボタン”風） ===== */
   function renderTemplates(){
     const items=($('tx-mode').value==='tour')?TPL_TOUR:TPL_LANG;
     const box=$('tx-templates'); box.innerHTML='';
@@ -170,7 +135,6 @@
     });
   }
 
-  /* ===== マイク：対応=音声認識 / 非対応=iOS録音アップロード ===== */
   let rec=null; const hasSR=('webkitSpeechRecognition' in window);
   elMic.addEventListener('click',()=>{
     if(hasSR){
@@ -179,7 +143,7 @@
       r.lang=srcLangFrom($('tx-dir').value); r.interimResults=false; r.continuous=false;
       elMicStatus.textContent='🎙️ 聞き取り中…';
       r.onresult=(e)=>{ const s=Array.from(e.results).map(r=>r[0].transcript).join(' ').trim(); if(s){ elIn.value=s; $('tx-translate').click(); } };
-      r.onend =()=>{ elMicStatus.textContent=''; rec=null; };
+      r.onend=()=>{ elMicStatus.textContent=''; rec=null; };
       r.onerror=()=>{ elMicStatus.textContent=''; rec=null; };
       r.start();
     }else{ elFile.click(); }
@@ -196,9 +160,8 @@
     elMicStatus.textContent=''; elFile.value='';
   });
 
-  /* ===== イベント ===== */
   $('tx-show-templates').addEventListener('click', renderTemplates);
-  $('tx-translate').addEventListener('click',()=>{ translateAndSpeak(elIn.value.trim(), $('tx-dir').value||'ja-en'); });
+  $('tx-translate').addEventListener('click',()=>translateAndSpeak(elIn.value.trim(), $('tx-dir').value||'ja-en'));
   elIn.addEventListener('keydown',(e)=>{ if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){ e.preventDefault(); $('tx-translate').click(); } });
   </script>
 </body>
