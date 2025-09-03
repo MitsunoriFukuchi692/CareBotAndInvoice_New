@@ -124,11 +124,13 @@
     else{ elSendA.style.display='none'; elSendB.style.display=''; }
     if(elTurn) elTurn.textContent = `次は ${currentSpeaker==='A'?'A':'B'} さんの番です`;
   }
-  function logMessage(speaker, text){
+
+  // AA/BB 表示：話者色は固定。kind=「原文/訳」をラベル表示
+  function logMessage(speaker, text, kind){
     const div=document.createElement('div');
     div.className='msg '+(speaker==='A'?'a':'b');
     const role=document.createElement('span'); role.className='role';
-    role.textContent=(speaker==='A'?'A':'B');
+    role.textContent = speaker + (kind ? `（${kind}）` : '');
     const body=document.createElement('div'); body.textContent=text;
     div.appendChild(role); div.appendChild(body);
     elLog.appendChild(div);
@@ -138,21 +140,20 @@
   async function addTurnAndSpeakLocal(speaker, text){
     const dir = (speaker==='A') ? ($('tx-dir').value||'ja-en') : reverseDir($('tx-dir').value||'ja-en');
 
-    // 発話側ログ
-    logMessage(speaker, text);
+    // 1) 原文（同話者）
+    logMessage(speaker, text, '原文');
 
-    // 翻訳
+    // 2) 翻訳
     let translated='';
     try{
       const r=await fetch('/ja/translate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text, direction:dir})});
       const j=await r.json(); translated=(j.translated||'').trim();
     }catch(e){ translated=''; }
 
-    // 相手側ログ＋訳文パネル
-    const other = (speaker==='A') ? 'B' : 'A';
-    if(translated){ logMessage(other, translated); elOut.textContent=translated; }
+    // 3) 訳（同話者）→ AA/BB
+    if(translated){ logMessage(speaker, translated, '訳'); elOut.textContent=translated; }
 
-    // サーバTTS
+    // 4) 相手に聞かせる言語で読み上げ
     try{
       const vol = (typeof window.getTTSVolume==='function') ? window.getTTSVolume() : 6.0;
       const a=await fetch('/tts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text: translated||text, lang: ttsLangFrom(dir), volume: vol})});
@@ -163,8 +164,8 @@
       }
     }catch(e){}
 
-    // 次のターンへ
-    currentSpeaker = other;
+    // 5) 次のターンへ
+    currentSpeaker = (speaker==='A') ? 'B' : 'A';
     updateTurnUI();
   }
   </script>
