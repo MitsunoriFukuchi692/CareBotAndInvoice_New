@@ -122,6 +122,31 @@
       <p id="translation-result"></p>
     </section>
 
+<!-- 🤝 往復会話モード UI -->
+<div id="conv-controls" style="margin:8px 0; display:flex; gap:12px; flex-wrap:wrap;">
+  <label>🤝 会話モード <input id="convMode" type="checkbox"></label>
+  <label>Aの言語:
+    <select id="langA">
+      <option value="ja-JP" selected>日本語</option>
+      <option value="en-US">英語</option>
+      <option value="vi-VN">ベトナム語</option>
+      <option value="fil-PH">タガログ語</option>
+    </select>
+  </label>
+  <label>Bの言語:
+    <select id="langB">
+      <option value="en-US" selected>英語</option>
+      <option value="ja-JP">日本語</option>
+      <option value="vi-VN">ベトナム語</option>
+      <option value="fil-PH">タガログ語</option>
+    </select>
+  </label>
+  <label>🤖 返答案をAIで作る <input id="autoSuggest" type="checkbox" checked></label>
+</div>
+
+<!-- クイック返答ボタン置き場 -->
+<div id="quick-replies" style="display:flex; gap:8px; flex-wrap:wrap; margin:6px 0;"></div>
+
     <div class="action-buttons">
       <button id="save-log-btn" type="button">会話ログ保存</button>
       <a class="btn" href="/daily_report" target="_blank" rel="noopener">📝 日報を生成</a>

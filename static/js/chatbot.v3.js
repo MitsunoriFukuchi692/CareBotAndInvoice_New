@@ -219,6 +219,87 @@ async function saveLog(){
   }catch(e){ console.error(e); alert("エラーが発生しました。"); }
 }
 
+// === 往復会話モード: 状態とユーティリティ ===
+let dialogue = [];               // {speaker:'A'|'B', text, lang}
+let currentSpeaker = 'A';
+
+const elConv   = document.getElementById('convMode');
+const elLangA  = document.getElementById('langA');
+const elLangB  = document.getElementById('langB');
+const elQR     = document.getElementById('quick-replies');
+const elAuto   = document.getElementById('autoSuggest');
+
+function otherOf(s){ return s === 'A' ? 'B' : 'A'; }
+function langOf(s){ return s === 'A' ? (elLangA?.value || 'ja-JP') : (elLangB?.value || 'en-US'); }
+function toShort(lang){ return (lang || '').split('-')[0].toLowerCase(); }
+
+// direction 文字列（/ja/translate 用）を作る
+function makeDirection(srcLang, dstLang){
+  const m = { 'ja':'ja', 'en':'en', 'vi':'vi', 'fil':'tl', 'tl':'tl' };
+  const s = m[toShort(srcLang)] || 'ja';
+  const d = m[toShort(dstLang)] || 'en';
+  return `${s}-${d}`;
+}
+
+async function addTurnAndSpeak(speaker, text){
+  const srcLang = langOf(speaker);
+  const dstSpeaker = otherOf(speaker);
+  const dstLang = langOf(dstSpeaker);
+
+  dialogue.push({ speaker, text, lang: srcLang });
+
+  // 画面に表示（元発話）
+  appendMessage(speaker === 'A' ? 'caregiver' : 'caree', text);
+
+  // 翻訳
+  const direction = makeDirection(srcLang, dstLang);
+  const res = await fetch('/ja/translate', {
+    method: 'POST',
+    headers: { 'Content-Type':'application/json' },
+    body: JSON.stringify({ text, direction })
+  });
+  const j = await res.json().catch(()=>({}));
+  const translated = (j.translated || j.text || '').trim();
+
+  // 相手側に表示→音声再生
+  appendMessage(dstSpeaker === 'A' ? 'caregiver' : 'caree', translated);
+  await speakViaServer(translated, dstLang);
+
+  // 次のターンへ & 返答案
+  currentSpeaker = dstSpeaker;
+  renderQuickReplies(dstSpeaker);
+}
+
+async function renderQuickReplies(forSpeaker){
+  if (!elQR) return;
+  elQR.innerHTML = '';
+  let suggestions = [];
+
+  if (elAuto?.checked){
+    try{
+      const ctx = dialogue.slice(-6);
+      const r = await fetch('/ja/suggest', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ dialogue: ctx, target_lang: langOf(forSpeaker), n: 3 })
+      });
+      const j = await r.json().catch(()=>({}));
+      suggestions = j.suggestions || [];
+    }catch(e){}
+  }
+  if (!suggestions.length){
+    suggestions = ["はい、わかりました。","もう少し詳しく教えてください。","おすすめはありますか？"];
+  }
+
+  suggestions.forEach(s => {
+    const b = document.createElement('button');
+    b.textContent = s;
+    b.className = 'chip';
+    b.onclick = () => addTurnAndSpeak(forSpeaker, s);
+    elQR.appendChild(b);
+  });
+}
+
 // ===== エントリーポイント =====
 document.addEventListener("DOMContentLoaded", () => {
   console.log("👉 スクリプト開始");
@@ -235,15 +316,28 @@ document.addEventListener("DOMContentLoaded", () => {
   const caregiverMic = $("#mic-caregiver");
   const careeMic = $("#mic-caree");
 
-  // 送信ボタン
-  caregiverSend?.addEventListener("click", () => {
-    const v = caregiverInput?.value?.trim();
-    if (v){ appendMessage("caregiver", v); caregiverInput.value = ""; }
-  });
-  careeSend?.addEventListener("click", () => {
-    const v = careeInput?.value?.trim();
-    if (v){ appendMessage("caree", v); careeInput.value = ""; }
-  });
+  // 送信ボタン（会話モードONなら往復フロー、OFFなら従来表示）
+   caregiverSend?.addEventListener("click", async () => {
+     const v = caregiverInput?.value?.trim();
+     if (!v) return;
+     if (elConv?.checked) {
+       await addTurnAndSpeak('A', v);
+     } else {
+       appendMessage("caregiver", v);
+     }
+     caregiverInput.value = "";
+   });
+
+   careeSend?.addEventListener("click", async () => {
+     const v = careeInput?.value?.trim();
+     if (!v) return;
+     if (elConv?.checked) {
+       await addTurnAndSpeak('B', v);
+     } else {
+       appendMessage("caree", v);
+     }
+     careeInput.value = "";
+   });
 
   // マイク
   setupMic(caregiverMic, caregiverInput);
@@ -297,7 +391,16 @@ document.addEventListener("DOMContentLoaded", () => {
     templateStartBtn.style.display = "none";
     showTemplates("caregiver");
   });
-});
+// 🤝 会話モードをONにしたら、Aから始める想定で返答案を用意
+   elConv?.addEventListener("change", () => {
+     if (elConv.checked) {
+       currentSpeaker = 'A';
+       renderQuickReplies('A');
+     } else {
+       elQR && (elQR.innerHTML = "");
+     }
+   });
+ });
 
 // ====== 録画 → サーバー保存 → 再生（PC安定版） ======
 let mediaRecorder = null;
