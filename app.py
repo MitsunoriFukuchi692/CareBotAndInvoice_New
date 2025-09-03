@@ -466,14 +466,14 @@ def tts():
         voice = data.get("voice")
         rate  = float(data.get("rate", 1.0))
         pitch = float(data.get("pitch", 0.0))
-        vol   = float(data.get("volume", 0.0))
+        vol   = float(data.get("volume", 6.0))
     else:
         text  = (request.args.get("text") or "").strip()
         lang  = _normalize_lang(request.args.get("lang") or "ja-JP")
         voice = request.args.get("voice")
         rate  = float(request.args.get("rate", 1.0))
         pitch = float(request.args.get("pitch", 0.0))
-        vol   = float(request.args.get("volume", 0.0))
+        vol   = float(request.args.get("volume", 6.0))
 
     if not text:
         return jsonify({"error": "読み上げるテキストがありません"}), 400
