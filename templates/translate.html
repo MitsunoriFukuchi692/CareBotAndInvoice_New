@@ -77,6 +77,11 @@
     <h3 class="hint" style="margin-top:12px">訳文</h3>
     <div id="tx-out" class="out"></div>
     <audio id="tx-audio" controls playsinline class="hidden" style="margin-top:8px"></audio>
+<!-- 🔊 音量スライダーを追加 -->
+<label for="volumeRange" class="hint">🔊 音量調整:
+  <input id="volumeRange" type="range" min="-10" max="10" step="1" value="6">
+  <span id="volumeVal">6</span> dB
+</label>
     <span id="tx-audio-hint" class="hint"></span>
   </div>
 
@@ -163,6 +168,17 @@
   $('tx-show-templates').addEventListener('click', renderTemplates);
   $('tx-translate').addEventListener('click',()=>translateAndSpeak(elIn.value.trim(), $('tx-dir').value||'ja-en'));
   elIn.addEventListener('keydown',(e)=>{ if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){ e.preventDefault(); $('tx-translate').click(); } });
+  // === 音量スライダー連動 ===
+  const volRange = document.getElementById("volumeRange");
+  const volVal = document.getElementById("volumeVal");
+  if(volRange && volVal){
+    volRange.addEventListener("input", () => {
+      volVal.textContent = volRange.value;
+    });
+    // グローバルに公開 → chatbot.v3.js から参照可能
+    window.getTTSVolume = () => parseFloat(volRange.value || "0");
+  }
+
   </script>
 </body>
 </html>

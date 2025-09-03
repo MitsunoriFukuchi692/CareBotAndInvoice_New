@@ -20,10 +20,13 @@ async function speakViaServer(text, langCode){
   if (!text) return;
   try{
     console.log("[TTS] /tts", { langCode, sample: text.slice(0,30) });
-    const res = await fetch("/tts", {
-      method: "POST",
-      headers: {"Content-Type":"application/json"},
-      body: JSON.stringify({ text, lang: langCode })
+     const res = await fetch("/tts", {
+       method: "POST",
+       headers: {"Content-Type":"application/json"},
+       body: JSON.stringify({
+         text,
+         lang: langCode,
+         volume: (typeof window.getTTSVolume === "function" ? window.getTTSVolume() : 6.0)
     });
     if (!res.ok) throw new Error("TTS failed");
     const blob = await res.blob();
