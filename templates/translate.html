@@ -4,14 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>翻訳学習／観光案内</title>
-  <!-- キャッシュバスター付き 共通CSS -->
-  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=tx-ui-20250902">
-  <!-- ここからページ専用CSS（※必ず <style>〜</style> で囲む） -->
+
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=tx-ui-20250903">
+
   <style>
     :root{
-      --brand-blue:#1a73e8;
-      --brand-green:#28a745;
+      --brand-blue:#1a73e8; --brand-green:#28a745;
       --chip:#f3f6f9; --bd:#e5e7eb; --text:#111827;
+      --a-bg:#e6f4ff; --a-bd:#b5daff; --b-bg:#fff2cc; --b-bd:#ffe28a;
     }
     body{color:var(--text);}
     .wrap{max-width:980px;margin:0 auto;padding:16px}
@@ -33,6 +33,13 @@
     .out{font-size:1.6rem;line-height:1.7;border:1px solid var(--bd);border-radius:12px;padding:12px;min-height:3.2em;background:#fff}
     .hint{display:block;margin-top:6px;color:#6b7280}
     .hidden{display:none!important}
+
+    /* 会話ログ（色分け） */
+    #dialogue-log{margin-top:10px}
+    #dialogue-log .msg{padding:8px 12px;border-radius:12px;margin:6px 0;max-width:90%}
+    #dialogue-log .a{background:var(--a-bg);border:1px solid var(--a-bd)}
+    #dialogue-log .b{background:var(--b-bg);border:1px solid var(--b-bd)}
+    #dialogue-log .role{font-size:12px;opacity:.7;display:block;margin-bottom:2px}
   </style>
 </head>
 <body>
@@ -74,111 +81,188 @@
     <label for="tx-input" class="hint">話す内容</label>
     <textarea id="tx-input" placeholder="例：おはようございます。今日はどこへ行きますか？"></textarea>
 
+    <!-- A/B 送信ボタン（ターンに応じて自動切替） -->
+    <div id="turn-buttons" style="display:flex; gap:8px; margin:8px 0;">
+      <button id="send-as-a" class="btn">Aとして送信</button>
+      <button id="send-as-b" class="btn" style="display:none;">Bとして送信</button>
+    </div>
+
+    <!-- 会話ログ（色分け） -->
+    <div id="dialogue-log"></div>
+
     <h3 class="hint" style="margin-top:12px">訳文</h3>
     <div id="tx-out" class="out"></div>
     <audio id="tx-audio" controls playsinline class="hidden" style="margin-top:8px"></audio>
-<!-- 🔊 音量スライダーを追加 -->
-<label for="volumeRange" class="hint">🔊 音量調整:
-  <input id="volumeRange" type="range" min="-10" max="10" step="1" value="6">
-  <span id="volumeVal">6</span> dB
-</label>
+
+    <!-- 🔊 音量スライダー -->
+    <label for="volumeRange" class="hint">🔊 音量調整:
+      <input id="volumeRange" type="range" min="-10" max="10" step="1" value="6">
+      <span id="volumeVal">6</span> dB
+    </label>
     <span id="tx-audio-hint" class="hint"></span>
   </div>
 
+  <!-- ここからJS。まずは往復会話ロジック（このページ内で自給） -->
   <script>
   const TPL_LANG=["おはようございます（Good morning）","ありがとうございます（Thank you）","ゆっくり話してください（Please speak slowly）","もう一度お願いします（One more time, please）"];
   const TPL_TOUR=["駅はどちらですか？","この近くのおすすめは？","いくらですか？カードは使えますか？","助けてください。道に迷いました。"];
   const $=id=>document.getElementById(id);
   const elIn=$('tx-input'), elOut=$('tx-out'), elAu=$('tx-audio'), elHint=$('tx-audio-hint'), elMic=$('tx-mic'), elMicStatus=$('tx-mic-status'), elFile=$('tx-file');
 
+  // 方向→TTS言語/入力言語
   const ttsLangFrom=(p)=>{p=(p||'ja-en').toLowerCase(); if(p==='ja-en')return'en-US'; if(p==='en-ja')return'ja-JP'; if(p==='ja-vi')return'vi-VN'; if(p==='vi-ja')return'ja-JP'; if(p==='ja-tl')return'fil-PH'; if(p==='tl-ja')return'ja-JP'; return'ja-JP';};
   const srcLangFrom=(p)=>{p=(p||'ja-en').toLowerCase(); if(p==='ja-en'||p==='ja-vi'||p==='ja-tl')return'ja-JP'; if(p==='en-ja')return'en-US'; if(p==='vi-ja')return'vi-VN'; if(p==='tl-ja')return'fil-PH'; return'ja-JP';};
 
-  async function translateAndSpeak(text, dir){
-    if(!text) return;
-    elOut.textContent='翻訳中…';
-    try{
-      const r=await fetch('/ja/translate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text, direction:dir})});
-      if(!r.ok) throw new Error('translate '+r.status);
-      const j=await r.json(); const t=(j.translated||'').trim();
-      elOut.textContent=t||'（訳文なし）';
+  // 反対方向を得る
+  const reverseDir=(p)=>{const m={ 'ja-en':'en-ja','en-ja':'ja-en','ja-vi':'vi-ja','vi-ja':'ja-vi','ja-tl':'tl-ja','tl-ja':'ja-tl'}; return m[(p||'ja-en').toLowerCase()]||'en-ja';};
 
-      if(t){
-        let ok=false;
-        try{
-          const a=await fetch('/tts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t, lang:ttsLangFrom(dir)})});
-          if(a.ok){
-            const b=await a.blob(); const url=URL.createObjectURL(b);
-            elAu.src=url; elAu.classList.remove('hidden');
-            if(elHint){ elHint.textContent=''; elHint.onclick=null; elHint.style.cursor=''; }
-            try{ await elAu.play(); ok=true; }
-            catch{ if(elHint){ elHint.innerHTML='▶️ タップで再生'; elHint.style.cursor='pointer'; elHint.onclick=async()=>{ try{ await elAu.play(); elHint.textContent=''; elHint.onclick=null; elHint.style.cursor=''; }catch{} }; } ok=true; }
-          }
-        }catch{}
-        if(!ok && 'speechSynthesis' in window){
-          try{
-            const u=new SpeechSynthesisUtterance(t);
-            u.lang=ttsLangFrom(dir);
-            speechSynthesis.cancel(); speechSynthesis.speak(u);
-            if(elHint) elHint.textContent='（端末音声で再生中）';
-          }catch{ if(elHint) elHint.textContent='音声生成に失敗しました'; }
-        }else if(!ok){
-          if(elHint) elHint.textContent='音声生成に失敗しました';
-        }
-      }
-    }catch(e){ console.error(e); elOut.textContent='翻訳エラーが発生しました。'; }
+  // ====== 往復会話：状態/UI ======
+  let currentSpeaker='A';
+  const elSendA=$('send-as-a'), elSendB=$('send-as-b'), elLog=$('dialogue-log');
+
+  function updateTurnUI(){
+    if(currentSpeaker==='A'){ elSendA.style.display=''; elSendB.style.display='none'; }
+    else{ elSendA.style.display='none'; elSendB.style.display=''; }
+  }
+  function logMessage(speaker, text){
+    const div=document.createElement('div');
+    div.className='msg '+(speaker==='A'?'a':'b');
+    const role=document.createElement('span'); role.className='role';
+    role.textContent=(speaker==='A'?'A':'B');
+    const body=document.createElement('div'); body.textContent=text;
+    div.appendChild(role); div.appendChild(body);
+    elLog.appendChild(div);
+    elLog.scrollTop=elLog.scrollHeight;
   }
 
+  async function addTurnAndSpeakLocal(speaker, text){
+    const dir = (speaker==='A') ? ($('tx-dir').value||'ja-en') : reverseDir($('tx-dir').value||'ja-en');
+
+    // 発話側をログ
+    logMessage(speaker, text);
+
+    // 翻訳
+    let translated='';
+    try{
+      const r=await fetch('/ja/translate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text, direction:dir})});
+      const j=await r.json(); translated=(j.translated||'').trim();
+    }catch(e){ translated=''; }
+
+    // 相手側ログ＋読み上げ
+    const other = (speaker==='A') ? 'B' : 'A';
+    if(translated){ logMessage(other, translated); }
+
+    // サーバTTS
+    try{
+      const vol = (typeof window.getTTSVolume==='function') ? window.getTTSVolume() : 6.0;
+      const a=await fetch('/tts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text: translated||text, lang: ttsLangFrom(dir), volume: vol})});
+      if(a.ok){
+        const b=await a.blob(); const url=URL.createObjectURL(b);
+        elAu.src=url; elAu.classList.remove('hidden');
+        try{ await elAu.play(); }catch{}
+      }
+    }catch(e){}
+
+    // 訳文パネルも更新（従来UI互換）
+    if(translated) elOut.textContent=translated;
+
+    // 次のターンへ
+    currentSpeaker = other;
+    updateTurnUI();
+  }
+  </script>
+
+  <!-- 既存の「翻訳して表示」など（従来機能は維持） -->
+  <script>
   function renderTemplates(){
     const items=($('tx-mode').value==='tour')?TPL_TOUR:TPL_LANG;
     const box=$('tx-templates'); box.innerHTML='';
     items.forEach(s=>{
       const btn=document.createElement('button');
       btn.className='chip'; btn.textContent=s;
-      btn.onclick=()=>{ elIn.value=s.replace(/（.*?）/,''); $('tx-translate').click(); };
+      btn.onclick=()=>{ $('tx-input').value=s.replace(/（.*?）/,''); $('tx-translate').click(); };
       box.appendChild(btn);
     });
   }
 
+  async function translateAndSpeak(text, dir){
+    if(!text) return;
+    $('tx-out').textContent='翻訳中…';
+    try{
+      const r=await fetch('/ja/translate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text, direction:dir})});
+      if(!r.ok) throw new Error('translate '+r.status);
+      const j=await r.json(); const t=(j.translated||'').trim();
+      $('tx-out').textContent=t||'（訳文なし）';
+
+      if(t){
+        try{
+          const vol = (typeof window.getTTSVolume==='function') ? window.getTTSVolume() : 6.0;
+          const a=await fetch('/tts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t, lang:ttsLangFrom(dir), volume: vol})});
+          if(a.ok){
+            const b=await a.blob(); const url=URL.createObjectURL(b);
+            const elAu=$('tx-audio'); elAu.src=url; elAu.classList.remove('hidden');
+            try{ await elAu.play(); }catch{}
+          }
+        }catch{}
+      }
+    }catch(e){ console.error(e); $('tx-out').textContent='翻訳エラーが発生しました。'; }
+  }
+
+  // マイク（既存の簡易実装）
   let rec=null; const hasSR=('webkitSpeechRecognition' in window);
-  elMic.addEventListener('click',()=>{
+  $('tx-mic').addEventListener('click',()=>{
+    const elMicStatus=$('tx-mic-status'), elFile=$('tx-file');
     if(hasSR){
       if(rec){ rec.stop(); rec=null; elMicStatus.textContent=''; return; }
       const r=new webkitSpeechRecognition(); rec=r;
       r.lang=srcLangFrom($('tx-dir').value); r.interimResults=false; r.continuous=false;
       elMicStatus.textContent='🎙️ 聞き取り中…';
-      r.onresult=(e)=>{ const s=Array.from(e.results).map(r=>r[0].transcript).join(' ').trim(); if(s){ elIn.value=s; $('tx-translate').click(); } };
+      r.onresult=(e)=>{ const s=Array.from(e.results).map(r=>r[0].transcript).join(' ').trim(); if(s){ $('tx-input').value=s; $('tx-translate').click(); } };
       r.onend=()=>{ elMicStatus.textContent=''; rec=null; };
       r.onerror=()=>{ elMicStatus.textContent=''; rec=null; };
       r.start();
     }else{ elFile.click(); }
   });
 
-  elFile.addEventListener('change',async()=>{
+  $('tx-file').addEventListener('change',async()=>{
+    const elFile=$('tx-file'); const elMicStatus=$('tx-mic-status');
     const file=elFile.files&&elFile.files[0]; if(!file)return;
     elMicStatus.textContent='📤 アップロード中…';
     try{
       const fd=new FormData(); fd.append('audio',file);
       const res=await fetch('/stt',{method:'POST',body:fd}); const j=await res.json();
-      const s=(j.text||'').trim(); if(s){ elIn.value=s; $('tx-translate').click(); }
+      const s=(j.text||'').trim(); if(s){ $('tx-input').value=s; $('tx-translate').click(); }
     }catch{ elMicStatus.textContent='❌ 文字起こし失敗'; return; }
     elMicStatus.textContent=''; elFile.value='';
   });
 
+  // ボタン結線
   $('tx-show-templates').addEventListener('click', renderTemplates);
-  $('tx-translate').addEventListener('click',()=>translateAndSpeak(elIn.value.trim(), $('tx-dir').value||'ja-en'));
-  elIn.addEventListener('keydown',(e)=>{ if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){ e.preventDefault(); $('tx-translate').click(); } });
-  // === 音量スライダー連動 ===
+  $('tx-translate').addEventListener('click',()=>translateAndSpeak($('tx-input').value.trim(), $('tx-dir').value||'ja-en'));
+
+  // A/B 送信（往復会話）
+  document.getElementById('send-as-a')?.addEventListener('click', ()=> {
+    const t=$('tx-input')?.value?.trim(); if(!t) return;
+    currentSpeaker='A'; addTurnAndSpeakLocal('A', t); $('tx-input').value='';
+  });
+  document.getElementById('send-as-b')?.addEventListener('click', ()=> {
+    const t=$('tx-input')?.value?.trim(); if(!t) return;
+    currentSpeaker='B'; addTurnAndSpeakLocal('B', t); $('tx-input').value='';
+  });
+
+  // 音量スライダー
   const volRange = document.getElementById("volumeRange");
   const volVal = document.getElementById("volumeVal");
   if(volRange && volVal){
-    volRange.addEventListener("input", () => {
-      volVal.textContent = volRange.value;
-    });
-    // グローバルに公開 → chatbot.v3.js から参照可能
+    volRange.addEventListener("input", () => { volVal.textContent = volRange.value; });
     window.getTTSVolume = () => parseFloat(volRange.value || "0");
   }
 
+  // Enter送信（従来）
+  $('tx-input').addEventListener('keydown',(e)=>{ if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){ e.preventDefault(); $('tx-translate').click(); } });
+
+  // 初期表示
+  updateTurnUI();
   </script>
 </body>
 </html>
