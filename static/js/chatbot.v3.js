@@ -1,16 +1,21 @@
-// === chatbot.v3.js (server TTS版) ===
-console.log("[chatbot.v3.js] v=20250811g");
+// === chatbot.v3.js (server TTS + mobile unlock + playTTS対応) ===
+console.log("[chatbot.v3.js] v=20250903a");
 
-// --- iOS 無音対策（初回タップでオーディオ解錠＆単一Audioで再生） ---
+// --- iOS/Android 無音対策：初回タップでオーディオ解錠 & 単一Audio ---
 let __audioUnlocked = false;
-window.addEventListener('touchstart', () => {
+window.addEventListener("touchstart", () => {
   if (__audioUnlocked) return;
-  const a = new Audio(); a.muted = true;
-  a.play().catch(()=>{}).finally(()=>{ __audioUnlocked = true; });
+  const a = new Audio();
+  a.muted = true;
+  a.playsInline = true;
+  a.play().catch(() => {}).finally(() => { __audioUnlocked = true; });
 }, { once: true });
-const __ttsAudio = new Audio();
 
-// --- サーバーTTS（/tts -> mp3） ---
+const __ttsAudio = new Audio();
+__ttsAudio.preload = "auto";
+__ttsAudio.playsInline = true;
+
+// --- サーバーTTS（/tts -> mp3）---
 async function speakViaServer(text, langCode){
   if (!text) return;
   try{
@@ -23,9 +28,15 @@ async function speakViaServer(text, langCode){
     if (!res.ok) throw new Error("TTS failed");
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
-    __ttsAudio.src = url;
-    __ttsAudio.muted = false;
-    await __ttsAudio.play();
+
+    // index.html で追加した window.playTTS があれば優先（解錠ボタン連携）
+    if (typeof window.playTTS === "function") {
+      await window.playTTS(url);
+    } else {
+      __ttsAudio.src = url;
+      __ttsAudio.muted = false;
+      await __ttsAudio.play();
+    }
     URL.revokeObjectURL(url);
   }catch(e){
     console.error("[speakViaServer] error:", e);
@@ -47,15 +58,24 @@ function pickText(data){
   );
 }
 
-// ===== 画面メッセージ（日本語だけはブラウザTTSで軽量化） =====
+// ===== 画面メッセージ（日本語はモバイル時のみサーバーTTSへフォールバック） =====
 function speak(text, role){
   if (!text) return;
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+  if (isMobile) {
+    // モバイルは安定優先：サーバーTTSで読み上げ
+    speakViaServer(text, "ja-JP");
+    return;
+  }
+
+  // PCは軽量なブラウザTTS
   const u = new SpeechSynthesisUtterance(text);
-  u.volume = 1.0; u.rate = 1.0;
-  u.lang = "ja-JP";
+  u.volume = 1.0; u.rate = 1.0; u.lang = "ja-JP";
   window.speechSynthesis.cancel();
   window.speechSynthesis.speak(u);
 }
+
 function appendMessage(role, text){
   const chatWindow = $("#chat-window");
   const div = document.createElement("div");
@@ -65,7 +85,7 @@ function appendMessage(role, text){
   div.textContent = (role === "caregiver" ? "介護士: " : role === "caree" ? "被介護者: " : "") + text;
   chatWindow.appendChild(div);
   chatWindow.scrollTop = chatWindow.scrollHeight;
-  speak(text, role); // 日本語
+  speak(text, role); // 日本語読み上げ
 }
 
 // ===== テンプレ会話 =====
@@ -83,6 +103,7 @@ const careeResponses = {
   "睡眠": ["よく眠れました","途中で目が覚めました","眠気があります","眠れませんでした"],
   "排便": ["普通でした","少し便秘気味です","下痢でした","昨日ありました"]
 };
+
 function showTemplates(role, category = null){
   const templateContainer = $("#template-buttons");
   templateContainer.innerHTML = "";
@@ -245,7 +266,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // 翻訳（読み上げはサーバーTTS）
+  // 翻訳（読み上げはサーバーTTS：端末依存なく安定）
   translateBtn?.addEventListener("click", async () => {
     const src = $("#explanation")?.textContent?.trim();
     if (!src){ alert("先に用語説明を入れてください"); return; }

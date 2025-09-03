@@ -49,6 +49,7 @@ def assist_hub():
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 client = OpenAI(api_key=OPENAI_API_KEY)
 tts_client = texttospeech.TextToSpeechClient()
+client_tts = tts_client
 
 # --------------------------------
 # /version /healthz /readyz /__test__（ここで一括定義）
@@ -427,26 +428,37 @@ _PREFERRED = {
     "fil-PH": "fil-PH-Wavenet-A",
 }
 
-def _synthesize_mp3(client_tts, text: str, lang: str, voice: str|None,
+def _synthesize_mp3(tts_client, text: str, lang: str, voice: str|None,
                     rate: float, pitch: float, volume_db: float) -> bytes:
-    if not text.strip(): raise ValueError("text is empty")
-    if not voice: voice = _PREFERRED.get(lang)
+    if not text.strip():
+        raise ValueError("text is empty")
+    if not voice:
+        voice = _PREFERRED.get(lang)
+
     synthesis_input = texttospeech.SynthesisInput(text=text)
     audio_config = texttospeech.AudioConfig(
         audio_encoding=texttospeech.AudioEncoding.MP3,
-        speaking_rate=float(rate), pitch=float(pitch), volume_gain_db=float(volume_db)
+        speaking_rate=rate,
+        pitch=pitch,
+        volume_gain_db=volume_db,
     )
     try:
         voice_sel = texttospeech.VoiceSelectionParams(language_code=lang, name=voice)
-        resp = client_tts.synthesize_speech(input=synthesis_input, voice=voice_sel, audio_config=audio_config)
+        resp = tts_client.synthesize_speech(
+            input=synthesis_input, voice=voice_sel, audio_config=audio_config
+        )
     except Exception:
         voice_sel = texttospeech.VoiceSelectionParams(language_code=lang)
-        resp = client_tts.synthesize_speech(input=synthesis_input, voice=voice_sel, audio_config=audio_config)
+        resp = tts_client.synthesize_speech(
+            input=synthesis_input, voice=voice_sel, audio_config=audio_config
+        )
     return resp.audio_content
 
 @app.route("/tts", methods=["POST", "GET", "OPTIONS"])
 def tts():
-    if request.method == "OPTIONS": return ("", 204)
+    if request.method == "OPTIONS":
+        return ("", 204)
+
     if request.method == "POST":
         data = request.get_json(silent=True) or {}
         text  = (data.get("text") or "").strip()
@@ -462,14 +474,18 @@ def tts():
         rate  = float(request.args.get("rate", 1.0))
         pitch = float(request.args.get("pitch", 0.0))
         vol   = float(request.args.get("volume", 0.0))
-    if not text: return jsonify({"error": "読み上げるテキストがありません"}), 400
+
+    if not text:
+        return jsonify({"error": "読み上げるテキストがありません"}), 400
 
     try:
-        audio = _synthesize_mp3(client_tts, text, lang, voice, rate, pitch, vol)
+        audio = _synthesize_mp3(tts_client, text, lang, voice, rate, pitch, vol)
         return (audio, 200, {
             "Content-Type": "audio/mpeg",
             "Content-Disposition": 'inline; filename="tts.mp3"',
             "Cache-Control": "no-store",
+            "Accept-Ranges": "bytes",
+            "Access-Control-Allow-Origin": "*",
         })
     except Exception as e:
         logging.exception("TTSエラー")

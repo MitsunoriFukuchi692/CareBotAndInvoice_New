@@ -25,6 +25,59 @@
 <a class="btn btn-outline-secondary" href="/assist">介護＋翻訳のハブ</a>
     </nav>
   </header>
+<button id="enable-audio" style="position:fixed;inset:auto 12px 12px auto;z-index:9999;padding:10px 14px;border-radius:12px;">
+  🔊 タップで音を有効化
+</button>
+<script>
+(() => {
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  let audioCtx = null;
+  let unlocked = false;
+
+  async function unlockAudio() {
+    if (unlocked) return true;
+    if (!audioCtx) audioCtx = new AudioCtx();
+    try {
+      await audioCtx.resume();
+      unlocked = (audioCtx.state === 'running');
+      if (unlocked) document.getElementById('enable-audio')?.remove();
+      return unlocked;
+    } catch (e) { return false; }
+  }
+
+  // 初回タップ/クリックで解放
+  const btn = document.getElementById('enable-audio');
+  ['pointerdown','touchstart','click'].forEach(ev => {
+    window.addEventListener(ev, unlockAudio, { once:true, passive:true });
+    btn?.addEventListener(ev, unlockAudio, { once:true, passive:true });
+  });
+
+  // 音声再生の共通関数（mp3 URLを渡す）
+  window.playTTS = async function(audioUrl) {
+    await unlockAudio();
+    const a = new Audio();
+    a.playsInline = true;  // iOSで全画面化を防ぐ
+    a.preload = 'auto';
+    a.crossOrigin = 'anonymous';
+    // キャッシュで無音化するケース対策にダミークエリ付与
+    a.src = audioUrl + (audioUrl.includes('?') ? '&' : '?') + 't=' + Date.now();
+    try {
+      await a.play();
+    } catch (err) {
+      // 失敗時はボタンを再表示して再タップを促す
+      if (!document.getElementById('enable-audio')) {
+        const b = document.createElement('button');
+        b.id = 'enable-audio';
+        b.textContent = '🔊 もう一度タップで音を有効化';
+        b.style = 'position:fixed;inset:auto 12px 12px auto;z-index:9999;padding:10px 14px;border-radius:12px;';
+        b.addEventListener('click', unlockAudio, { once:true });
+        document.body.appendChild(b);
+      }
+      console.error('play failed:', err);
+    }
+  }
+})();
+</script>
 
   <main>
     <h2 class="chat-title">介護支援ボット</h2>
