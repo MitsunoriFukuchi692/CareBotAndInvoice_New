@@ -1,5 +1,5 @@
-// === chatbot.v3.js (server TTS + mobile unlock + playTTS対応) ===
-console.log("[chatbot.v3.js] v=20250904f");
+// === chatbot.v3.js (v=20250904k, server TTS 強化 + fallback) ===
+console.log("[chatbot.v3.js] v=20250904k");
 
 // --- iOS/Android 無音対策：初回タップでオーディオ解錠 & 単一Audio ---
 let __audioUnlocked = false;
@@ -15,37 +15,67 @@ const __ttsAudio = new Audio();
 __ttsAudio.preload = "auto";
 __ttsAudio.playsInline = true;
 
-// --- サーバーTTS（/tts -> mp3）---  ※完全版
+// --- サーバーTTS（/tts -> mp3） 強化版：JSON → URLENCODED → speechSynthesis ---
 async function speakViaServer(text, langCode){
   if (!text) return;
+
+  async function playFromResponse(res){
+    if (!res.ok) throw new Error("TTS HTTP " + res.status);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    try{
+      if (typeof window.playTTS === "function") {
+        await window.playTTS(url);
+      } else {
+        __ttsAudio.src = url;
+        __ttsAudio.muted = false;
+        await __ttsAudio.play();
+      }
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
+
+  // ① JSON
   try{
-    console.log("[TTS] /tts", { langCode, sample: text.slice(0,30) });
-    const res = await fetch("/tts", {
+    const r1 = await fetch("/tts", {
       method: "POST",
       headers: { "Content-Type":"application/json" },
       body: JSON.stringify({
         text,
         lang: langCode,
-        volume: (typeof window.getTTSVolume === "function"
-                  ? window.getTTSVolume() : 6.0)
+        volume: (typeof window.getTTSVolume === "function" ? window.getTTSVolume() : 1.0)
       })
     });
+    await playFromResponse(r1);
+    return;
+  }catch(e1){
+    console.warn("[TTS] JSON失敗 → URLENCODEDへ", e1);
+  }
 
-    if (!res.ok) throw new Error("TTS failed");
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
+  // ② URLENCODED（サーバ実装差異に対応）
+  try{
+    const r2 = await fetch("/tts", {
+      method: "POST",
+      headers: { "Content-Type":"application/x-www-form-urlencoded;charset=UTF-8" },
+      body: new URLSearchParams({ text, lang: langCode, volume: "1.0" })
+    });
+    await playFromResponse(r2);
+    return;
+  }catch(e2){
+    console.warn("[TTS] URLENCODED失敗 → speechSynthesisへ", e2);
+  }
 
-    if (typeof window.playTTS === "function") {
-      await window.playTTS(url);
-    } else {
-      __ttsAudio.src = url;
-      __ttsAudio.muted = false;
-      await __ttsAudio.play();
-    }
-    URL.revokeObjectURL(url);
-  }catch(e){
-    console.error("[speakViaServer] error:", e);
-    alert("音声再生に失敗しました。");
+  // ③ 最後の砦：ブラウザTTS
+  try{
+    const u = new SpeechSynthesisUtterance(text);
+    const ok = ["ja-JP","en-US","vi-VN","fil-PH"];
+    u.lang = ok.includes(langCode) ? langCode : "en-US";
+    u.rate = 1.0; u.volume = 1.0;
+    speechSynthesis.cancel(); speechSynthesis.speak(u);
+  }catch(e3){
+    console.error("[TTS] すべて失敗", e3);
+    alert("音声再生に失敗しました");
   }
 }
 
@@ -67,13 +97,7 @@ function pickText(data){
 function speak(text, role){
   if (!text) return;
   const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-
-  if (isMobile) {
-    // モバイルは安定優先：サーバーTTSで読み上げ
-    speakViaServer(text, "ja-JP");
-    return;
-  }
-
+  if (isMobile) { speakViaServer(text, "ja-JP"); return; }
   // PCは軽量なブラウザTTS
   const u = new SpeechSynthesisUtterance(text);
   u.volume = 1.0; u.rate = 1.0; u.lang = "ja-JP";
@@ -90,7 +114,7 @@ function appendMessage(role, text){
   div.textContent = (role === "caregiver" ? "介護士: " : role === "caree" ? "被介護者: " : "") + text;
   chatWindow.appendChild(div);
   chatWindow.scrollTop = chatWindow.scrollHeight;
-  speak(text, role); // 日本語読み上げ
+  speak(text, role);
 }
 
 // ===== テンプレ会話 =====
@@ -318,7 +342,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const caregiverMic = $("#mic-caregiver");
   const careeMic = $("#mic-caree");
 
-  // 送信ボタン（会話モードONなら往復フロー、OFFなら従来表示）
+  // 送信ボタン
   caregiverSend?.addEventListener("click", async () => {
     const v = caregiverInput?.value?.trim();
     if (!v) return;
@@ -356,7 +380,7 @@ document.addEventListener("DOMContentLoaded", () => {
     try{
       const text = await fetchExplain(term);
       out.textContent = (text && String(text).trim()) || "(取得できませんでした)";
-      if (text) speak(text, "caregiver"); // 日本語読み上げ
+      if (text) speak(text, "caregiver");
     }catch(err){
       console.error("[explain] error:", err);
       alert("用語説明に失敗しました");
@@ -365,7 +389,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // 翻訳（読み上げはサーバーTTS：端末依存なく安定）
+  // 翻訳→読み上げ
   translateBtn?.addEventListener("click", async () => {
     const src = $("#explanation")?.textContent?.trim();
     if (!src){ alert("先に用語説明を入れてください"); return; }
@@ -375,7 +399,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const translated = data.translated || pickText(data) || "";
       $("#translation-result").textContent = translated || "(翻訳できませんでした)";
 
-      const speakLangMap = { ja: "ja-JP", en: "en-US", vi: "vi-VN", tl: "fil-PH" };
+      const speakLangMap = { ja:"ja-JP", en:"en-US", vi:"vi-VN", tl:"fil-PH", fil:"fil-PH" };
       const targetLang = (direction.split("-")[1] || "en").toLowerCase();
       const langCode = speakLangMap[targetLang] || "en-US";
       await speakViaServer(translated, langCode);
@@ -395,7 +419,7 @@ document.addEventListener("DOMContentLoaded", () => {
     showTemplates("caregiver");
   });
 
-  // 🤝 会話モードをONにしたら、Aから始める想定で返答案を用意
+  // 会話モード切替
   elConv?.addEventListener("change", () => {
     if (elConv.checked) {
       currentSpeaker = 'A';
@@ -406,7 +430,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 });
 
-// ====== 録画 → サーバー保存 → 再生（PC安定版） ======
+// ====== 録画 → サーバ保存 → 再生（PC安定版） ======
 let mediaRecorder = null;
 let recordedChunks = [];
 
