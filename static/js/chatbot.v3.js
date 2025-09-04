@@ -1,5 +1,5 @@
 // === chatbot.v3.js (server TTS + mobile unlock + playTTS対応) ===
-console.log("[chatbot.v3.js] v=20250903a");
+console.log("[chatbot.v3.js] v=20250904f");
 
 // --- iOS/Android 無音対策：初回タップでオーディオ解錠 & 単一Audio ---
 let __audioUnlocked = false;
@@ -15,24 +15,26 @@ const __ttsAudio = new Audio();
 __ttsAudio.preload = "auto";
 __ttsAudio.playsInline = true;
 
-// --- サーバーTTS（/tts -> mp3）---
+// --- サーバーTTS（/tts -> mp3）---  ※完全版
 async function speakViaServer(text, langCode){
   if (!text) return;
   try{
     console.log("[TTS] /tts", { langCode, sample: text.slice(0,30) });
-     const res = await fetch("/tts", {
-       method: "POST",
-       headers: {"Content-Type":"application/json"},
-       body: JSON.stringify({
-         text,
-         lang: langCode,
-         volume: (typeof window.getTTSVolume === "function" ? window.getTTSVolume() : 6.0)
+    const res = await fetch("/tts", {
+      method: "POST",
+      headers: { "Content-Type":"application/json" },
+      body: JSON.stringify({
+        text,
+        lang: langCode,
+        volume: (typeof window.getTTSVolume === "function"
+                  ? window.getTTSVolume() : 6.0)
+      })
     });
+
     if (!res.ok) throw new Error("TTS failed");
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
 
-    // index.html で追加した window.playTTS があれば優先（解錠ボタン連携）
     if (typeof window.playTTS === "function") {
       await window.playTTS(url);
     } else {
@@ -317,27 +319,27 @@ document.addEventListener("DOMContentLoaded", () => {
   const careeMic = $("#mic-caree");
 
   // 送信ボタン（会話モードONなら往復フロー、OFFなら従来表示）
-   caregiverSend?.addEventListener("click", async () => {
-     const v = caregiverInput?.value?.trim();
-     if (!v) return;
-     if (elConv?.checked) {
-       await addTurnAndSpeak('A', v);
-     } else {
-       appendMessage("caregiver", v);
-     }
-     caregiverInput.value = "";
-   });
+  caregiverSend?.addEventListener("click", async () => {
+    const v = caregiverInput?.value?.trim();
+    if (!v) return;
+    if (elConv?.checked) {
+      await addTurnAndSpeak('A', v);
+    } else {
+      appendMessage("caregiver", v);
+    }
+    caregiverInput.value = "";
+  });
 
-   careeSend?.addEventListener("click", async () => {
-     const v = careeInput?.value?.trim();
-     if (!v) return;
-     if (elConv?.checked) {
-       await addTurnAndSpeak('B', v);
-     } else {
-       appendMessage("caree", v);
-     }
-     careeInput.value = "";
-   });
+  careeSend?.addEventListener("click", async () => {
+    const v = careeInput?.value?.trim();
+    if (!v) return;
+    if (elConv?.checked) {
+      await addTurnAndSpeak('B', v);
+    } else {
+      appendMessage("caree", v);
+    }
+    careeInput.value = "";
+  });
 
   // マイク
   setupMic(caregiverMic, caregiverInput);
@@ -386,21 +388,23 @@ document.addEventListener("DOMContentLoaded", () => {
   // 会話ログ保存
   saveBtn?.addEventListener("click", saveLog);
 
-  // テンプレ開始
-  templateStartBtn?.addEventListener("click", () => {
+  // テンプレ開始（a要素のデフォルト遷移を抑止）
+  templateStartBtn?.addEventListener("click", (e) => {
+    e.preventDefault();
     templateStartBtn.style.display = "none";
     showTemplates("caregiver");
   });
-// 🤝 会話モードをONにしたら、Aから始める想定で返答案を用意
-   elConv?.addEventListener("change", () => {
-     if (elConv.checked) {
-       currentSpeaker = 'A';
-       renderQuickReplies('A');
-     } else {
-       elQR && (elQR.innerHTML = "");
-     }
-   });
- });
+
+  // 🤝 会話モードをONにしたら、Aから始める想定で返答案を用意
+  elConv?.addEventListener("change", () => {
+    if (elConv.checked) {
+      currentSpeaker = 'A';
+      renderQuickReplies('A');
+    } else {
+      elQR && (elQR.innerHTML = "");
+    }
+  });
+});
 
 // ====== 録画 → サーバー保存 → 再生（PC安定版） ======
 let mediaRecorder = null;
