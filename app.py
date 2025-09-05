@@ -425,6 +425,43 @@ def _context_reply(target_lang: str, last_text: str):
         return {"en":"Sure, I’ll speak more slowly.","ja":"はい、ゆっくり話しますね。","vi":"Vâng, tôi sẽ nói chậm hơn.","tl":"Sige, magsasalita ako nang dahan-dahan."}.get(target_lang,"はい、ゆっくり話しますね。")
     return None
 
+# 言語コード → 言語名（正規化用）
+LANG_NAME = {
+    "ja": "Japanese",
+    "en": "English",
+    "vi": "Vietnamese",
+    "tl": "Tagalog",
+    "fil": "Tagalog",  # 別名を吸収
+}
+
+# 返答を必ず target_lang の言語に正規化
+def _force_to_lang(text: str, target_lang: str) -> str:
+    if not text or not client:
+        return text
+    try:
+        lang_name = LANG_NAME.get(target_lang, target_lang)  # vi→Vietnamese, tl/fil→Tagalog
+        r = client.chat.completions.create(
+            model="gpt-4o-mini",
+            temperature=0.1,
+            messages=[
+                {
+                    "role": "system",
+                    "content": f"You output only the normalized {lang_name}. No explanations, no quotes."
+                },
+                {
+                    "role": "user",
+                    "content": f"Normalize the following into {lang_name} ONLY:\n\nTEXT:\n{text}"
+                },
+            ],
+        )
+        out = (r.choices[0].message.content or "").strip()
+        # たまに付く引用符を除去
+        if (out.startswith('"') and out.endswith('"')) or (out.startswith('“') and out.endswith('”')):
+            out = out[1:-1].strip()
+        return out
+    except Exception:
+        return text
+
 # ===== /ja/suggest（旅行/学習用・ハードBAN付き） =====
 
 # 出力方針（モデル用）
@@ -455,6 +492,7 @@ def _fallback_suggestions(tlang: str):
     return ["もう少し詳しく教えてください。","どんな希望がありますか？","近場のおすすめを出しましょうか？"]
 
 # ハードBAN（方向指示の定型文は物理的に禁止）
+
 BAN_GENERIC = [
   "please go straight.", "go straight.", "please head straight.", "go forward.", "head straight.",
   "turn left.", "turn right.",
@@ -514,6 +552,9 @@ def ja_suggest():
             "tl":"Nasaan ka ngayon? (landmark o pangalan ng istasyon)"
         }.get(target_lang, "今どこにいますか？")
     suggestions = [s for s in suggestions if not _is_banned_direction(s)] or _fallback_suggestions(target_lang)
+
+# ★ここで言語正規化（ベトナム語固定など）★
+    reply = _force_to_lang(reply, target_lang)
 
     return jsonify({"suggestions": suggestions[:n], "reply": reply})
 # ===== /ja/suggest ここまで =====
