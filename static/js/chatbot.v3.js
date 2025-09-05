@@ -15,66 +15,81 @@ const __ttsAudio = new Audio();
 __ttsAudio.preload = "auto";
 __ttsAudio.playsInline = true;
 
-// --- サーバーTTS（/tts -> mp3） 強化版：JSON → URLENCODED → speechSynthesis ---
+// --- サーバーTTS（堅牢版） ---
 async function speakViaServer(text, langCode){
   if (!text) return;
 
+  // 共通: レスポンス→再生（音声か検査）
   async function playFromResponse(res){
     if (!res.ok) throw new Error("TTS HTTP " + res.status);
+    const ct = res.headers.get("Content-Type") || "";
     const blob = await res.blob();
+
+    // 音声でなければ、本文を読んで詳細ログを出す
+    if (!ct.startsWith("audio/") && !blob.type.startsWith("audio/")) {
+      let msg = "";
+      try { msg = await (new Response(blob)).text(); } catch(e){}
+      console.warn("[TTS] 非音声レスポンス:", { ct, msg: msg?.slice(0,200) });
+      throw new Error("TTS returned non-audio content");
+    }
+
     const url = URL.createObjectURL(blob);
     try{
-      if (typeof window.playTTS === "function") {
+      if (typeof window.playTTS === "function"){
         await window.playTTS(url);
       } else {
-        __ttsAudio.src = url;
-        __ttsAudio.muted = false;
-        await __ttsAudio.play();
+        const a = new Audio(url);
+        a.playsInline = true;
+        a.muted = false;
+        await a.play();
       }
     } finally {
       URL.revokeObjectURL(url);
     }
   }
 
-  // ① JSON
+  // ① JSON POST
   try{
     const r1 = await fetch("/tts", {
       method: "POST",
       headers: { "Content-Type":"application/json" },
-      body: JSON.stringify({
-        text,
-        lang: langCode,
-        volume: (typeof window.getTTSVolume === "function" ? window.getTTSVolume() : 1.0)
-      })
+      body: JSON.stringify({ text, lang: langCode })
     });
     await playFromResponse(r1);
     return;
-  }catch(e1){
-    console.warn("[TTS] JSON失敗 → URLENCODEDへ", e1);
-  }
+  }catch(e1){ console.warn("[TTS] JSON失敗 → urlencoded へ", e1); }
 
-  // ② URLENCODED（サーバ実装差異に対応）
+  // ② x-www-form-urlencoded POST
   try{
     const r2 = await fetch("/tts", {
       method: "POST",
       headers: { "Content-Type":"application/x-www-form-urlencoded;charset=UTF-8" },
-      body: new URLSearchParams({ text, lang: langCode, volume: "1.0" })
+      body: new URLSearchParams({ text, lang: langCode })
     });
     await playFromResponse(r2);
     return;
-  }catch(e2){
-    console.warn("[TTS] URLENCODED失敗 → speechSynthesisへ", e2);
-  }
+  }catch(e2){ console.warn("[TTS] urlencoded失敗 → GET へ", e2); }
 
-  // ③ 最後の砦：ブラウザTTS
+  // ③ GET（/tts?text=...&lang=...）にフォールバック
+  try{
+    // 直接 Audio に食わせる（サーバがストリーム返却する実装向け）
+    const url = `/tts?text=${encodeURIComponent(text)}&lang=${encodeURIComponent(langCode)}&t=${Date.now()}`;
+    const a = new Audio(url);
+    a.playsInline = true;
+    a.muted = false;
+    await a.play(); // ここでCTが非音声だと NotSupportedError → 最後の砦へ
+    return;
+  }catch(e3){ console.warn("[TTS] GET失敗 → speechSynthesis へ", e3); }
+
+  // ④ 最後の砦：ブラウザTTS
   try{
     const u = new SpeechSynthesisUtterance(text);
     const ok = ["ja-JP","en-US","vi-VN","fil-PH"];
     u.lang = ok.includes(langCode) ? langCode : "en-US";
     u.rate = 1.0; u.volume = 1.0;
     speechSynthesis.cancel(); speechSynthesis.speak(u);
-  }catch(e3){
-    console.error("[TTS] すべて失敗", e3);
+  }catch(e4){
+    console.error("[TTS] すべて失敗", e4);
     alert("音声再生に失敗しました");
   }
 }
@@ -485,3 +500,40 @@ document.getElementById("stopSaveBtn")?.addEventListener("click", async () => {
   try { await stopAndSaveRecording(); alert("保存しました"); }
   catch (e) { alert("保存失敗: " + e.message); }
 });
+
+// === robust playTTS override (force-stable) ===
+window.playTTS = async function playTTS(srcOrBlob){
+  try{
+    let src = srcOrBlob;
+    if (srcOrBlob instanceof Blob) src = URL.createObjectURL(srcOrBlob);
+
+    let el = document.getElementById('tts-audio');
+    if (!el) {
+      el = document.createElement('audio');
+      el.id = 'tts-audio';
+      el.playsInline = true;
+      document.body.appendChild(el);
+    }
+    el.muted = false;
+    el.src = (typeof src === 'string' ? src : URL.createObjectURL(src)) +
+             (String(src).includes('?') ? '&' : '?') + 't=' + Date.now();
+
+    await el.play();
+  } catch (e){
+    console.warn('playTTS failed, fallback to raw Audio()', e);
+    try{
+      const a = new Audio(typeof srcOrBlob === 'string' ? srcOrBlob : URL.createObjectURL(srcOrBlob));
+      a.playsInline = true;
+      a.muted = false;
+      await a.play();
+    } catch (ee){
+      console.error('Audio fallback failed', ee);
+      if (window.__lastTranslatedText) {
+        const u = new SpeechSynthesisUtterance(window.__lastTranslatedText);
+        u.lang = 'ja-JP'; u.rate = 1.0; u.volume = 1.0;
+        speechSynthesis.cancel(); speechSynthesis.speak(u);
+      }
+    }
+  }
+};
+
