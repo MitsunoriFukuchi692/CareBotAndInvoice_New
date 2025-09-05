@@ -15,6 +15,7 @@ from openai import OpenAI
 import httpx
 import openai as _o
 import io
+import json
 
 print("Using GOOGLE_APPLICATION_CREDENTIALS:", os.getenv("GOOGLE_APPLICATION_CREDENTIALS"))
 
@@ -408,6 +409,114 @@ def translate_text():
     out = re.sub(r'^(英訳|和訳|訳|translation|output)\s*[:：]\s*','', out, flags=re.I)
     out = out.splitlines()[0].strip()
     return jsonify({"translated": out})
+
+# --- context-based short replies ---
+THANKS_PAT = re.compile(r"(ありがとうございます|感謝|サンキュー|thank(s| you)?)", re.IGNORECASE)
+APOLOGY_PAT = re.compile(r"(すみません|ごめん|sorry)", re.IGNORECASE)
+SLOW_PAT = re.compile(r"(ゆっくり|slow(ly)?)", re.IGNORECASE)
+
+def _context_reply(target_lang: str, last_text: str):
+    t = last_text or ""
+    if THANKS_PAT.search(t):
+        return {"en":"You're welcome.","ja":"どういたしまして。","vi":"Không có gì.","tl":"Walang anuman."}.get(target_lang,"どういたしまして。")
+    if APOLOGY_PAT.search(t):
+        return {"en":"No problem.","ja":"大丈夫ですよ。","vi":"Không sao đâu.","tl":"Walang problema."}.get(target_lang,"大丈夫ですよ。")
+    if SLOW_PAT.search(t):
+        return {"en":"Sure, I’ll speak more slowly.","ja":"はい、ゆっくり話しますね。","vi":"Vâng, tôi sẽ nói chậm hơn.","tl":"Sige, magsasalita ako nang dahan-dahan."}.get(target_lang,"はい、ゆっくり話しますね。")
+    return None
+
+# ===== /ja/suggest（旅行/学習用・ハードBAN付き） =====
+
+# 出力方針（モデル用）
+SYSTEM_SUGGEST = """You are a concise, bilingual travel & translation assistant.
+Task: Based on the recent dialogue and the requested target language, output either:
+- suggestions: 2-5 concise candidate replies the user might tap
+- reply: a single best next utterance (for auto-reply)
+Rules:
+- Be context-aware (travel/tourism in Japan, daily conversation for learners).
+- If the user asks for POI, give 1-3 specific options with short reasons (name + area).
+- If info is insufficient, ask 1 short clarifying question (NOT generic directions).
+- Never output generic direction phrases such as:
+  "Please go straight.", "Go straight.", "Turn left/right.",
+  "まっすぐ行ってください。", "左/右に曲がってください。"
+  Unless the user clearly asks for directions **with origin + destination**.
+- Keep each sentence short and natural; avoid over-formality.
+- Use the target_lang for output.
+Output JSON ONLY: {"suggestions":[...], "reply":"..."}.
+"""
+
+def _fallback_suggestions(tlang: str):
+    if tlang == "en":
+        return ["Could you tell me more?", "Any preferences?", "Would you like nearby options?"]
+    if tlang == "vi":
+        return ["Bạn có thể nói rõ hơn không?", "Bạn thích điều gì?", "Bạn muốn gợi ý gần đây không?"]
+    if tlang in ("tl","fil"):
+        return ["Pwede bang dagdagan mo ang detalye?", "Ano ang gusto mo?", "Gusto mo ba ng mga lugar malapit?"]
+    return ["もう少し詳しく教えてください。","どんな希望がありますか？","近場のおすすめを出しましょうか？"]
+
+# ハードBAN（方向指示の定型文は物理的に禁止）
+BAN_GENERIC = [
+  "please go straight.", "go straight.", "please head straight.", "go forward.", "head straight.",
+  "turn left.", "turn right.",
+  "まっすぐ行ってください。", "まっすぐ進んでください。", "まっすぐ行って", "まっすぐ進んで",
+  "左に曲がってください。", "右に曲がってください。"
+]
+BAN_GENERIC_LC = [s.lower() for s in BAN_GENERIC]
+def _is_banned_direction(text: str) -> bool:
+    import re as _re
+    t = (text or "").strip().lower()
+    t = _re.sub(r"\s+", " ", t)
+    return any(bp in t for bp in BAN_GENERIC_LC)
+
+@app.post("/ja/suggest")
+def ja_suggest():
+    data = request.get_json(silent=True) or {}
+    dialogue = data.get("dialogue") or []  # [{speaker:'A'|'B', 'text':..., 'lang':'ja-JP'}, ...]
+    target_lang_full = (data.get("target_lang") or "ja-JP")
+    target_lang = target_lang_full.split("-")[0].lower()  # "ja"/"en"/"vi"/"tl"
+    n = max(1, min(int(data.get("n") or 3), 5))
+    mode = (data.get("mode") or "suggest").lower()
+
+    ctx = dialogue[-6:]
+    last_text = (ctx[-1]["text"] if ctx else "") or ""
+
+    suggestions, reply = [], ""
+    try:
+        payload = {"target_lang": target_lang, "n": n, "mode": mode, "context": ctx}
+        resp = client.chat.completions.create(
+            model="gpt-4o-mini",
+            temperature=0.4,
+            response_format={"type":"json_object"},
+            messages=[
+                {"role":"system","content": SYSTEM_SUGGEST},
+                {"role":"user","content": json.dumps(payload, ensure_ascii=False)}
+            ],
+        )
+        obj = json.loads(resp.choices[0].message.content)
+        suggestions = (obj.get("suggestions") or [])[:n]
+        reply = (obj.get("reply") or "").strip()
+    except Exception as e:
+        logging.warning("/ja/suggest fallback: %s", e)
+
+    if not suggestions:
+        suggestions = _fallback_suggestions(target_lang)
+    if not reply and suggestions:
+        reply = suggestions[0]
+
+    # --- 最終フィルタ（ここが“返却直前の1行追加”の場所です） ---
+    if _is_banned_direction(reply):
+        # 文脈ショート応答（thanks/apology/slow）を優先、なければ出発地点の確認に差し替え
+        ctx_fix = _context_reply(target_lang, last_text)
+        reply = ctx_fix or {
+            "en":"Where are you now? (landmark or station name)",
+            "ja":"今どこにいますか？（目印や駅名を教えてください）",
+            "vi":"Bạn đang ở đâu bây giờ? (mốc hoặc tên ga)",
+            "tl":"Nasaan ka ngayon? (landmark o pangalan ng istasyon)"
+        }.get(target_lang, "今どこにいますか？")
+    suggestions = [s for s in suggestions if not _is_banned_direction(s)] or _fallback_suggestions(target_lang)
+
+    return jsonify({"suggestions": suggestions[:n], "reply": reply})
+# ===== /ja/suggest ここまで =====
 
 # --------------------------------
 # TTS（Google Text-to-Speech）
