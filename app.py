@@ -555,7 +555,7 @@ def ja_suggest():
 
 # ★ここで言語正規化（ベトナム語固定など）★
     reply = _force_to_lang(reply, target_lang)
-
+    suggestions = [_force_to_lang(s, target_lang) for s in suggestions]
     return jsonify({"suggestions": suggestions[:n], "reply": reply})
 # ===== /ja/suggest ここまで =====
 
