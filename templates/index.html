@@ -16,24 +16,42 @@
 
     /* プリホーム／ホーム */
     /* ---- Prehome visibility hard-fix ---- */
-.cb-layer{
-  position:fixed; inset:0;
-  display:flex; align-items:center; justify-content:center;
-  background: rgba(255,255,255,0.95) !important; /* ←白ベースに */
-  z-index: 9999 !important;
+/* === Prehome を強制的にハッキリ表示 === */
+.cb-layer,
+.cb-layer * {
   opacity: 1 !important;
-  pointer-events: auto !important;              /* ←クリック可 */
+  filter: none !important;
+  color: #111 !important;
 }
-.cb-wrap{ width:min(720px,92vw); opacity:1 !important; filter:none !important; }
-.cb-title{ color:#111 !important; text-shadow:none !important; }
-.cb-grid{ display:grid; gap:14px; }
+
+.cb-layer{
+  position: fixed; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,0.50) !important;   /* 画面を暗幕で抑える */
+  z-index: 99999 !important;
+  pointer-events: auto !important;
+}
+
+/* 中身は白いカードとして浮かせる */
+.cb-wrap{
+  width: min(720px,92vw);
+  background: #fff !important;
+  border-radius: 16px;
+  box-shadow: 0 12px 28px rgba(0,0,0,.25);
+  padding: 24px;
+}
+
+.cb-title{ font-size: 1.6rem; margin: 0 0 12px; }
+.cb-grid{ display: grid; gap: 14px; }
+
 .cb-card,.cb-big{
-  height:88px; font-size:1.2rem; font-weight:700;
-  border-radius:16px; border:1px solid #d1d5db !important;
-  background:#fff !important; color:#111 !important;
-  box-shadow:0 8px 24px rgba(0,0,0,.12);
-  cursor:pointer;
+  height: 88px; font-size: 1.2rem; font-weight: 700;
+  border-radius: 16px; border: 1px solid #d1d5db !important;
+  background: #fff !important; color: #111 !important;
+  box-shadow: 0 8px 24px rgba(0,0,0,.12);
+  cursor: pointer;
 }
+
 html, body{ filter:none !important; opacity:1 !important; }
   </style>
 </head>
