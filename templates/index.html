@@ -14,45 +14,36 @@
     #template-buttons{ display:flex; flex-wrap:wrap; gap:6px; justify-content:center; margin-bottom:8px; }
     .action-buttons{ display:flex; gap:8px; justify-content:center; margin-top:12px; }
 
-    /* プリホーム／ホーム */
-    /* ---- Prehome visibility hard-fix ---- */
-/* === Prehome を強制的にハッキリ表示 === */
-.cb-layer,
-.cb-layer * {
-  opacity: 1 !important;
-  filter: none !important;
-  color: #111 !important;
-}
+    /* === Prehome を強制的にハッキリ表示（他CSSを上書き） === */
+    html, body{ filter:none !important; opacity:1 !important; }
+    .cb-layer, .cb-layer *{ opacity:1 !important; filter:none !important; color:#111 !important; }
+    .cb-layer{
+      position:fixed; inset:0;
+      display:flex; align-items:center; justify-content:center;
+      background:rgba(0,0,0,.45) !important;  /* 暗幕 */
+      z-index:99999 !important;
+      pointer-events:auto !important;          /* クリック可 */
+    }
+    .cb-wrap{
+      width:min(720px,92vw);
+      background:#fff !important;
+      border-radius:16px;
+      box-shadow:0 12px 28px rgba(0,0,0,.25);
+      padding:24px;
+    }
+    .cb-title{ font-size:1.6rem; margin:0 0 12px; }
+    .cb-grid{ display:grid; gap:14px; }
 
-.cb-layer{
-  position: fixed; inset: 0;
-  display: flex; align-items: center; justify-content: center;
-  background: rgba(0,0,0,0.50) !important;   /* 画面を暗幕で抑える */
-  z-index: 99999 !important;
-  pointer-events: auto !important;
-}
-
-/* 中身は白いカードとして浮かせる */
-.cb-wrap{
-  width: min(720px,92vw);
-  background: #fff !important;
-  border-radius: 16px;
-  box-shadow: 0 12px 28px rgba(0,0,0,.25);
-  padding: 24px;
-}
-
-.cb-title{ font-size: 1.6rem; margin: 0 0 12px; }
-.cb-grid{ display: grid; gap: 14px; }
-
-.cb-card,.cb-big{
-  height: 88px; font-size: 1.2rem; font-weight: 700;
-  border-radius: 16px; border: 1px solid #d1d5db !important;
-  background: #fff !important; color: #111 !important;
-  box-shadow: 0 8px 24px rgba(0,0,0,.12);
-  cursor: pointer;
-}
-
-html, body{ filter:none !important; opacity:1 !important; }
+    /* 白い帯・疑似要素・無効化 */
+    .cb-card,.cb-big{
+      display:flex !important; align-items:center !important; justify-content:center !important;
+      height:88px !important; font-size:1.2rem !important; font-weight:700 !important;
+      border-radius:16px !important; border:1px solid #d1d5db !important;
+      background:#fff !important; color:#111 !important;
+      box-shadow:0 8px 24px rgba(0,0,0,.12) !important;
+      cursor:pointer; overflow:hidden !important; position:relative !important;
+    }
+    .cb-card::before,.cb-card::after,.cb-big::before,.cb-big::after{ content:none !important; display:none !important; }
   </style>
 </head>
 <body>
@@ -136,7 +127,7 @@ html, body{ filter:none !important; opacity:1 !important; }
     </div>
   </main>
 
-  <!-- プリホーム：最初から表示（hiddenなし） -->
+  <!-- プリホーム（最初から表示） -->
   <div id="cb-prehome" class="cb-layer">
     <div class="cb-wrap">
       <h1 class="cb-title">どちらを使いますか? v-PREHOME-plain</h1>
@@ -156,79 +147,75 @@ html, body{ filter:none !important; opacity:1 !important; }
   </div>
   <button id="cb-home-fab" class="cb-fab" title="ホームへ/ボット切替">🏠</button>
 
-
+  <!-- 既存の外部JS -->
   <script defer src="/static/js/chatbot.v3.js?v=20250906"></script>
 
-<!-- プリホーム制御（DOM読込後に必ずハンドラ登録） -->
-<script>
-document.addEventListener('DOMContentLoaded', () => {
-  const $ = s => document.querySelector(s);
-  const pre = $('#cb-prehome'), home = $('#cb-home'), fab = $('#cb-home-fab');
-  const title = $('#cb-home-title'), box = $('#cb-home-buttons');
+  <!-- プリホーム制御（DOM読込後） -->
+  <script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const $ = s => document.querySelector(s);
+    const pre = $('#cb-prehome'), home = $('#cb-home'), fab = $('#cb-home-fab');
+    const title = $('#cb-home-title'), box = $('#cb-home-buttons');
 
-  function show(el){ if(el) el.hidden=false; }
-  function hide(el){ if(el) el.hidden=true; }
-  function clickSel(sel){ const el=document.querySelector(sel); if(el) el.click(); }
+    function show(el){ if(el) el.hidden=false; }
+    function hide(el){ if(el) el.hidden=true; }
+    function clickSel(sel){ const el=document.querySelector(sel); if(el) el.click(); }
 
-  // —— 既存UIと接続
-  function goTalk(){
-    document.querySelector('#caregiver-input')?.focus();
-    clickSel('#mic-caregiver, #micBtn, [data-action="mic"]');
-  }
-  function goTranslate(){
-    const panel = document.querySelector('#translation-panel');
-    panel?.scrollIntoView({behavior:'smooth', block:'start'});
-    document.querySelector('#translate-direction')?.focus();
-    // clickSel('#translate-btn'); // 自動実行したいなら有効化
-  }
-  function goGuide(){
-    const panel = document.querySelector('#translation-panel');
-    panel?.scrollIntoView({behavior:'smooth', block:'start'});
-  }
-  function goCheckin(){ window.dispatchEvent(new CustomEvent('carebot:open-checkin')); }
-  function goSettings(){ window.dispatchEvent(new CustomEvent('carebot:open-settings')); }
+    // 既存UIに接続
+    function goTalk(){
+      document.querySelector('#caregiver-input')?.focus();
+      clickSel('#mic-caregiver, #micBtn, [data-action="mic"]');
+    }
+    function goTranslate(){
+      const panel=document.querySelector('#translation-panel');
+      panel?.scrollIntoView({behavior:'smooth', block:'start'});
+      document.querySelector('#translate-direction')?.focus();
+      // clickSel('#translate-btn'); // 自動実行したい場合は有効化
+    }
+    function goGuide(){
+      const panel=document.querySelector('#translation-panel');
+      panel?.scrollIntoView({behavior:'smooth', block:'start'});
+    }
+    function goCheckin(){ window.dispatchEvent(new CustomEvent('carebot:open-checkin')); }
+    function goSettings(){ window.dispatchEvent(new CustomEvent('carebot:open-settings')); }
 
-  const HOMES = {
-    care:{ title:"介護支援ボット", buttons:[
-      {label:" 🎙️ 話す",action:goTalk},
-      {label:" ✅ 安否確認",action:goCheckin},
-      {label:" ⚙️ 設定",action:goSettings}
-    ]},
-    tour:{ title:"翻訳学習/観光案内ボット", buttons:[
-      {label:" 🎙️ 話す",action:goTalk},
-      {label:" 🌐 翻訳",action:goTranslate},
-      {label:" 🧭 観光案内",action:goGuide}
-    ]}
-  };
+    const HOMES = {
+      care:{ title:"介護支援ボット", buttons:[
+        {label:" 🎙️ 話す",action:goTalk},
+        {label:" ✅ 安否確認",action:goCheckin},
+        {label:" ⚙️ 設定",action:goSettings}
+      ]},
+      tour:{ title:"翻訳学習/観光案内ボット", buttons:[
+        {label:" 🎙️ 話す",action:goTalk},
+        {label:" 🌐 翻訳",action:goTranslate},
+        {label:" 🧭 観光案内",action:goGuide}
+      ]}
+    };
 
-  function renderHome(kind){
-    title.textContent = HOMES[kind].title;
-    box.innerHTML = '';
-    HOMES[kind].buttons.forEach(b=>{
-      const btn = document.createElement('button');
-      btn.className = 'cb-big';
-      btn.textContent = b.label;
-      btn.addEventListener('click', ()=>{ hide(pre); show(home); b.action(); });
-      box.appendChild(btn);
+    function renderHome(kind){
+      title.textContent = HOMES[kind].title;
+      box.innerHTML = '';
+      HOMES[kind].buttons.forEach(b=>{
+        const btn = document.createElement('button');
+        btn.className = 'cb-big';
+        btn.textContent = b.label;
+        btn.addEventListener('click', ()=>{ hide(pre); show(home); b.action(); });
+        box.appendChild(btn);
+      });
+    }
+
+    pre?.querySelectorAll('[data-bot]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const kind = btn.getAttribute('data-bot');
+        renderHome(kind);
+        hide(pre); show(home);
+      });
     });
-  }
+    fab?.addEventListener('click', ()=>{ hide(home); show(pre); });
 
-  // 選択ボタンに確実にイベントを付与
-  pre?.querySelectorAll('[data-bot]').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
-      const kind = btn.getAttribute('data-bot');
-      renderHome(kind);
-      hide(pre); show(home);
-    });
+    // 最前面で必ず見える
+    show(pre);
   });
-
-  // 🏠で戻る
-  fab?.addEventListener('click', ()=>{ hide(home); show(pre); });
-
-  // 最初はプリホームが前面
-  show(pre);
-});
-</script>
-
+  </script>
 </body>
 </html>
