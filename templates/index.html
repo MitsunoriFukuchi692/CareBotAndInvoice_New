@@ -135,61 +135,87 @@ html, body{ filter:none !important; opacity:1 !important; }
   </div>
   <button id="cb-home-fab" class="cb-fab" title="ホームへ/ボット切替">🏠</button>
 
-  <!-- 外部JSは一旦停止：原因切り分けのため
+
   <script defer src="/static/js/chatbot.v3.js?v=20250906"></script>
-  -->
 
-  <!-- プリホーム制御（依存なし・最小限） -->
-  <script>
-  (function(){
-    const $ = s=>document.querySelector(s);
-    const pre=$('#cb-prehome'), home=$('#cb-home'), fab=$('#cb-home-fab');
-    const title=$('#cb-home-title'), box=$('#cb-home-buttons');
+<!-- プリホーム制御 -->
+<script>
+(function(){
+  const $ = s=>document.querySelector(s);
+  const pre=$('#cb-prehome'), home=$('#cb-home'), fab=$('#cb-home-fab');
+  const title=$('#cb-home-title'), box=$('#cb-home-buttons');
 
-    function show(el){ el.hidden=false; }
-    function hide(el){ el.hidden=true; }
+  function show(el){ el.hidden=false; }
+  function hide(el){ el.hidden=true; }
 
-    function goTalk(){ alert("🎤 話す（仮）"); }
-    function goTranslate(){ alert("🌐 翻訳（仮）"); }
-    function goGuide(){ alert("🧭 観光案内（仮）"); }
-    function goCheckin(){ alert("✅ 安否確認（仮）"); }
-    function goSettings(){ alert("⚙️ 設定（仮）"); }
+  // ==== 外部JSと結び直した関数 ====
+  function clickSel(sel){
+    const el=document.querySelector(sel);
+    if(el) el.click();
+  }
 
-    const HOMES = {
-      care:{ title:"介護支援ボット", buttons:[
-        {label:" 🎙️ 話す",action:goTalk},
-        {label:" ✅ 安否確認",action:goCheckin},
-        {label:" ⚙️ 設定",action:goSettings}
-      ]},
-      tour:{ title:"翻訳学習/観光案内ボット", buttons:[
-        {label:" 🎙️ 話す",action:goTalk},
-        {label:" 🌐 翻訳",action:goTranslate},
-        {label:" 🧭 観光案内",action:goGuide}
-      ]}
-    };
+  // 介護支援ボット: 入力欄にフォーカスしてマイク起動
+  function goTalk(){
+    document.querySelector('#caregiver-input')?.focus();
+    clickSel('#mic-caregiver, #micBtn, [data-action="mic"]');
+  }
 
-    function renderHome(kind){
-      title.textContent = HOMES[kind].title;
-      box.innerHTML='';
-      HOMES[kind].buttons.forEach(b=>{
-        const btn=document.createElement('button');
-        btn.className='cb-big';
-        btn.textContent=b.label;
-        btn.onclick=()=>{ hide(pre); show(home); b.action(); };
-        box.appendChild(btn);
-      });
-    }
+  // 翻訳: 翻訳パネルへスクロール & セレクトにフォーカス
+  function goTranslate(){
+    const panel=document.querySelector('#translation-panel');
+    panel?.scrollIntoView({behavior:'smooth', block:'start'});
+    document.querySelector('#translate-direction')?.focus();
+    // 自動実行したい場合は次行のコメント解除
+    // clickSel('#translate-btn');
+  }
 
-    pre.querySelectorAll('[data-bot]').forEach(btn=>{
-      btn.addEventListener('click', ()=>{
-        const kind = btn.getAttribute('data-bot');
-        renderHome(kind);
-        hide(pre); show(home);
-      });
+  // 観光案内（とりあえず翻訳と同じ処理）
+  function goGuide(){
+    const panel=document.querySelector('#translation-panel');
+    panel?.scrollIntoView({behavior:'smooth', block:'start'});
+  }
+
+  // 仮：イベント発火のみ
+  function goCheckin(){ window.dispatchEvent(new CustomEvent('carebot:open-checkin')); }
+  function goSettings(){ window.dispatchEvent(new CustomEvent('carebot:open-settings')); }
+
+  // ==== プリホームのメニュー定義 ====
+  const HOMES = {
+    care:{ title:"介護支援ボット", buttons:[
+      {label:" 🎙️ 話す",action:goTalk},
+      {label:" ✅ 安否確認",action:goCheckin},
+      {label:" ⚙️ 設定",action:goSettings}
+    ]},
+    tour:{ title:"翻訳学習/観光案内ボット", buttons:[
+      {label:" 🎙️ 話す",action:goTalk},
+      {label:" 🌐 翻訳",action:goTranslate},
+      {label:" 🧭 観光案内",action:goGuide}
+    ]}
+  };
+
+  function renderHome(kind){
+    title.textContent = HOMES[kind].title;
+    box.innerHTML='';
+    HOMES[kind].buttons.forEach(b=>{
+      const btn=document.createElement('button');
+      btn.className='cb-big';
+      btn.textContent=b.label;
+      btn.onclick=()=>{ hide(pre); show(home); b.action(); };
+      box.appendChild(btn);
     });
+  }
 
-    fab.addEventListener('click', ()=>{ hide(home); show(pre); });
-  })();
-  </script>
+  pre.querySelectorAll('[data-bot]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const kind = btn.getAttribute('data-bot');
+      renderHome(kind);
+      hide(pre); show(home);
+    });
+  });
+
+  fab.addEventListener('click', ()=>{ hide(home); show(pre); });
+})();
+</script>
+
 </body>
 </html>
