@@ -3,10 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>v-PREHOME AIみまくん＋インボイスデモ</title>
+  <title>v-PREHOME-plain AIみまくん＋インボイスデモ</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
   <style>
-    /* 簡易UI調整 */
     .chat-title{ text-align:center; margin:1rem 0; }
     #chat-window{ border:1px solid #ddd; border-radius:8px; min-height:180px; padding:8px; margin:8px 0; }
     .input-panel{ display:grid; grid-template-columns:1fr auto auto; gap:8px; align-items:center; }
@@ -15,7 +14,7 @@
     #template-buttons{ display:flex; flex-wrap:wrap; gap:6px; justify-content:center; margin-bottom:8px; }
     .action-buttons{ display:flex; gap:8px; justify-content:center; margin-top:12px; }
 
-    /* ==== プリホーム／ホーム画面 ==== */
+    /* プリホーム／ホーム */
     .cb-layer{position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
       background:rgba(255,255,255,.95); z-index:9999; padding:24px}
     .cb-wrap{width:min(720px,92vw)}
@@ -24,8 +23,8 @@
     .cb-card,.cb-big{height:88px; font-size:1.4rem; font-weight:700; border-radius:16px; border:1px solid #e5e7eb;
       box-shadow:0 6px 18px rgba(0,0,0,.08); background:#fff; cursor:pointer}
     .cb-card{display:flex; align-items:center; justify-content:center}
-    .cb-fab{position:fixed; right:18px; bottom:18px; width:56px; height:56px; border-radius:999px;
-      font-size:24px; border:none; box-shadow:0 6px 18px rgba(0,0,0,.18); background:#fff; z-index:9998; cursor:pointer}
+    .cb-fab{position:fixed; right:18px; bottom:18px; width:56px; height:56px; border:none; border-radius:999px;
+      font-size:24px; box-shadow:0 6px 18px rgba(0,0,0,.18); background:#fff; z-index:9998; cursor:pointer}
     @media (hover:hover){.cb-card:hover,.cb-big:hover{transform:translateY(-1px);}}
   </style>
 </head>
@@ -110,10 +109,10 @@
     </div>
   </main>
 
-  <!-- ==== プリホーム ==== -->
-  <div id="cb-prehome" class="cb-layer" hidden>
+  <!-- プリホーム：最初から表示（hiddenなし） -->
+  <div id="cb-prehome" class="cb-layer">
     <div class="cb-wrap">
-      <h1 class="cb-title">どちらを使いますか?</h1>
+      <h1 class="cb-title">どちらを使いますか? v-PREHOME-plain</h1>
       <div class="cb-grid">
         <button class="cb-card" data-bot="care"> 🤝 介護支援ボット</button>
         <button class="cb-card" data-bot="tour"> 🧭 翻訳学習/観光案内ボット</button>
@@ -121,7 +120,7 @@
     </div>
   </div>
 
-  <!-- ==== ホーム（3ボタン） ==== -->
+  <!-- ホーム（3ボタン） -->
   <div id="cb-home" class="cb-layer" hidden aria-label="ホームメニュー">
     <div class="cb-wrap">
       <h1 id="cb-home-title" class="cb-title"></h1>
@@ -130,25 +129,23 @@
   </div>
   <button id="cb-home-fab" class="cb-fab" title="ホームへ/ボット切替">🏠</button>
 
+  <!-- 外部JSは一旦停止：原因切り分けのため
   <script defer src="/static/js/chatbot.v3.js?v=20250906"></script>
+  -->
 
-  <!-- プリホーム制御 -->
+  <!-- プリホーム制御（依存なし・最小限） -->
   <script>
-  (()=> {
+  (function(){
     const $ = s=>document.querySelector(s);
     const pre=$('#cb-prehome'), home=$('#cb-home'), fab=$('#cb-home-fab');
     const title=$('#cb-home-title'), box=$('#cb-home-buttons');
 
     function show(el){ el.hidden=false; }
     function hide(el){ el.hidden=true; }
-    function hideAll(){ hide(pre); hide(home); }
 
-    // 最初は必ずプリホーム
-    hideAll(); show(pre);
-
-    function goTalk(){ alert("🎤 話す開始（本体機能に接続）"); }
-    function goTranslate(){ alert("🌐 翻訳に移動"); }
-    function goGuide(){ alert("🧭 観光案内に移動"); }
+    function goTalk(){ alert("🎤 話す（仮）"); }
+    function goTranslate(){ alert("🌐 翻訳（仮）"); }
+    function goGuide(){ alert("🧭 観光案内（仮）"); }
     function goCheckin(){ alert("✅ 安否確認（仮）"); }
     function goSettings(){ alert("⚙️ 設定（仮）"); }
 
@@ -166,25 +163,26 @@
     };
 
     function renderHome(kind){
-      title.textContent=HOMES[kind].title;
+      title.textContent = HOMES[kind].title;
       box.innerHTML='';
       HOMES[kind].buttons.forEach(b=>{
         const btn=document.createElement('button');
-        btn.className='cb-big'; btn.textContent=b.label;
-        btn.onclick=()=>{ hideAll(); b.action(); };
+        btn.className='cb-big';
+        btn.textContent=b.label;
+        btn.onclick=()=>{ hide(pre); show(home); b.action(); };
         box.appendChild(btn);
       });
     }
 
     pre.querySelectorAll('[data-bot]').forEach(btn=>{
       btn.addEventListener('click', ()=>{
-        const kind=btn.getAttribute('data-bot');
+        const kind = btn.getAttribute('data-bot');
         renderHome(kind);
         hide(pre); show(home);
       });
     });
 
-    fab.addEventListener('click', ()=>{ hideAll(); show(pre); });
+    fab.addEventListener('click', ()=>{ hide(home); show(pre); });
   })();
   </script>
 </body>
