@@ -1,392 +1,191 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <!-- Google Analytics 等�Eスクリプトはそ�Eまま -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-BKSCQLEW8Y"></script>
-    <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
-      gtag('config', 'G-BKSCQLEW8Y');
-    </script>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Robo Study Inc. - Innovative AI solutions with AI Mimakun, your intelligent companion for elderly care and daily assistance.">
-    <meta name="keywords" content="AI Mimakun, 高齢老E��守りロボッチE 介護ロボッチE AI 技衁E 健康支援">
-    <title>v-TEST AI Mimakun - 高度ケアロボッチE| ロボ�EスタチE��株式会社</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 0;
-            background-color: #f4f9f4;
-            line-height: 1.6;
-            color: #333;
-        }
-        header {
-            background: linear-gradient(135deg, #5ca37e, #4a8663);
-            color: white;
-            text-align: center;
-            padding: 50px 20px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        header h1 {
-            margin: 0;
-            font-size: 2.2em;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
-        }
-        header p {
-            margin: 15px 0 0;
-            font-size: 1.2em;
-            opacity: 0.9;
-        }
-        .language-selector {
-            text-align: right;
-            padding: 10px 20px;
-            background-color: #333;
-        }
-        .language-selector a {
-            display: inline-block;
-            margin: 0 10px;
-            padding: 5px 15px;
-            color: white;
-            text-decoration: none;
-            border: 1px solid white;
-            border-radius: 3px;
-            transition: all 0.3s ease;
-        }
-        .language-selector a:hover {
-            background-color: white;
-            color: #333;
-        }
-        nav {
-            background-color: #333;
-            padding: 15px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-            display: flex;
-            justify-content: center;
-            flex-wrap: wrap;
-            gap: 15px;
-        }
-        nav a {
-            transform: scale(0.9);
-            color: white;
-            text-decoration: none;
-            background-color: #5ca37e;
-            padding: 12px 24px;
-            border-radius: 6px;
-            font-size: 0.95em;
-            font-weight: bold;
-            transition: all 0.3s ease;
-            min-width: 140px;
-            text-align: center;
-        }
-        nav a:hover {
-            background-color: #4a8663;
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-        }
-        .intro-video {
-            text-align: center;
-            background: white;
-            padding: 20px;
-            margin: 20px auto;
-            border-radius: 8px;
-            max-width: 1000px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-        }
-        main {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 40px 20px;
-        }
-        .hero-section {
-            text-align: center;
-            margin-bottom: 60px;
-            background: white;
-            padding: 40px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-        }
-        .hero-section h2 {
-            color: #333;
-            font-size: 2em;
-            margin-bottom: 20px;
-        }
-        .hero-section p {
-            color: #666;
-            max-width: 800px;
-            margin: 0 auto 30px;
-            font-size: 1.1em;
-        }
-        .video-section {
-            text-align: center;
-            margin: 40px 0;
-            padding: 40px;
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-        }
-        .video-section h2 {
-            color: #333;
-            margin-bottom: 30px;
-            font-size: 1.8em;
-        }
-        .video-container {
-            position: relative;
-            width: 100%;
-            max-width: 800px;
-            margin: 0 auto;
-            overflow: hidden;
-            padding-top: 56.25%; /* 16:9 ratio */
-        }
-        .video-container video {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            border-radius: 8px;
-        }
-        .features-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 30px;
-            margin: 40px 0;
-        }
-        .feature-card {
-            background: white;
-            padding: 30px;
-            border-radius: 8px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            transition: transform 0.3s ease;
-        }
-        .feature-card:hover {
-            transform: translateY(-5px);
-        }
-        .feature-card h3 {
-            color: #5ca37e;
-            margin-bottom: 15px;
-            font-size: 1.4em;
-        }
-        .feature-card p {
-            color: #666;
-            font-size: 1em;
-            line-height: 1.6;
-        }
-        .button-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 20px;
-            margin: 40px 0;
-        }
-        .button-grid a {
-            display: block;
-            padding: 15px 20px;
-            background-color: #5ca37e;
-            color: white;
-            text-decoration: none;
-            border-radius: 6px;
-            text-align: center;
-            transition: all 0.3s ease;
-        }
-        .button-grid a:hover {
-            background-color: #4a8663;
-            transform: translateY(-2px);
-        }
-        .pdf-section {
-            background: white;
-            padding: 40px;
-            border-radius: 8px;
-            margin: 40px 0;
-            text-align: center;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        .pdf-section h2 {
-            color: #333;
-            margin-bottom: 30px;
-            font-size: 1.8em;
-        }
-        .pdf-link {
-            display: inline-block;
-            margin: 10px;
-            padding: 15px 30px;
-            color: #5ca37e;
-            text-decoration: none;
-            font-size: 1em;
-            border: 2px solid #5ca37e;
-            border-radius: 4px;
-            transition: all 0.3s ease;
-        }
-        .pdf-link:hover {
-            background-color: #5ca37e;
-            color: white;
-            transform: translateY(-2px);
-        }
-        .image-section {
-            text-align: center;
-            margin: 40px 0;
-        }
-        .image-section img {
-            max-width: 100%;
-            height: auto;
-            border-radius: 8px;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-        }
-        footer {
-            background-color: #333;
-            color: white;
-            text-align: center;
-            padding: 40px 20px;
-            margin-top: 60px;
-        }
-        .contact-info {
-            margin-top: 20px;
-            padding-top: 20px;
-            border-top: 1px solid rgba(255,255,255,0.1);
-            max-width: 800px;
-            margin: 20px auto 0;
-        }
-        .social-links {
-            margin: 20px 0;
-        }
-        .social-links a {
-            color: white;
-            margin: 0 10px;
-            text-decoration: none;
-        }
-        @media (max-width: 768px) {
-            header h1 {
-                font-size: 1.8em;
-            }
-            nav {
-                padding: 10px;
-            }
-            nav a {
-                transform: scale(0.9);
-                width: 100%;
-                margin: 5px 0;
-            }
-            .features-grid {
-                grid-template-columns: 1fr;
-            }
-            .hero-section, 
-            .video-section,
-            .pdf-section {
-                padding: 20px;
-            }
-            .video-container {
-                margin: 0 -20px;
-                border-radius: 0;
-            }
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>v-PREHOME AIみまくん＋インボイスデモ</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  <style>
+    /* 簡易UI調整 */
+    .chat-title{ text-align:center; margin:1rem 0; }
+    #chat-window{ border:1px solid #ddd; border-radius:8px; min-height:180px; padding:8px; margin:8px 0; }
+    .input-panel{ display:grid; grid-template-columns:1fr auto auto; gap:8px; align-items:center; }
+    .role-label{ grid-column:1 / -1; font-weight:bold; margin-top:8px; }
+    .template-start{ margin:0.5rem auto; display:inline-block; }
+    #template-buttons{ display:flex; flex-wrap:wrap; gap:6px; justify-content:center; margin-bottom:8px; }
+    .action-buttons{ display:flex; gap:8px; justify-content:center; margin-top:12px; }
+
+    /* ==== プリホーム／ホーム画面 ==== */
+    .cb-layer{position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+      background:rgba(255,255,255,.95); z-index:9999; padding:24px}
+    .cb-wrap{width:min(720px,92vw)}
+    .cb-title{font-size:1.6rem; margin:0 0 12px; font-weight:700; text-align:center}
+    .cb-grid{display:grid; gap:14px}
+    .cb-card,.cb-big{height:88px; font-size:1.4rem; font-weight:700; border-radius:16px; border:1px solid #e5e7eb;
+      box-shadow:0 6px 18px rgba(0,0,0,.08); background:#fff; cursor:pointer}
+    .cb-card{display:flex; align-items:center; justify-content:center}
+    .cb-fab{position:fixed; right:18px; bottom:18px; width:56px; height:56px; border-radius:999px;
+      font-size:24px; border:none; box-shadow:0 6px 18px rgba(0,0,0,.18); background:#fff; z-index:9998; cursor:pointer}
+    @media (hover:hover){.cb-card:hover,.cb-big:hover{transform:translateY(-1px);}}
+  </style>
 </head>
 <body>
-    <!-- 言語�E替�E�日本語�EEnglish�E��Eリンク -->
-    <div class="language-selector">
-        <a href="index.html">日本誁E/a>
-        <a href="index_en.html">English</a>
+  <header>
+    <nav style="display:flex; justify-content:center; gap:1rem; margin:1rem 0;">
+      <a href="https://robostudy.jp/test/index.html" class="btn btn-outline-primary">🔙 戻る</a>
+      <a href="/camera-test/" class="btn btn-outline-secondary" target="_blank" rel="noopener">カメラテスト</a>
+      <a href="/daily_report" class="btn btn-outline-secondary" target="_blank" rel="noopener">見守りレポート</a>
+      <a class="btn btn-outline-secondary" href="/translate">翻訳学習／観光案内</a>
+      <a class="btn btn-outline-secondary" href="/assist">介護＋翻訳のハブ</a>
+    </nav>
+  </header>
+
+  <main>
+    <h2 class="chat-title">介護支援ボット</h2>
+
+    <div style="margin: 1rem 0; text-align: center;">
+      <a href="#" id="template-start-btn" class="template-start btn">テンプレート対話開始</a>
+      <div id="template-buttons"></div>
     </div>
 
-    <header>
-        <h1>ロボ�EスタチE��株式会社へようこそ</h1>
-        <p>ヒューマンロボット�E生�E未来を創造する</p>
-    </header>
+    <div id="chat-window"></div>
 
-    <!-- 「ヒューマンロボット�E生�E未来を創造する」�E下に動画を挿入 -->
-    <section class="intro-video">
-        <video controls width="60%">
-            <source src="みまくん動画アニメ調_字幁Emp4" type="video/mp4">
-            お使ぁE�Eブラウザは video タグをサポ�EトしてぁE��せん、E
-        </video>
+    <div class="input-panel">
+      <label class="role-label caregiver" for="caregiver-input">介護士</label>
+      <input id="caregiver-input" type="text" placeholder="介護士の発言を入力" />
+      <button id="mic-caregiver" type="button">🎤</button>
+      <button id="send-caregiver" type="button">送信</button>
+
+      <label class="role-label caree" for="caree-input">被介護者</label>
+      <input id="caree-input" type="text" placeholder="被介護者の発言を入力" />
+      <button id="mic-caree" type="button">🎤</button>
+      <button id="send-caree" type="button">送信</button>
+    </div>
+
+    <section id="glossary" style="margin-top:16px;">
+      <input type="text" id="term" placeholder="用語を入力" />
+      <button id="explain-btn" type="button">説明</button>
+      <p id="explanation"></p>
     </section>
 
-    <!-- ナビゲーション�E�日本語版チャチE��ボット�E chatbot.html を指ぁE-->
-    <nav>
-        <!-- ChatbotAI をクリチE��すると別ペ�EジでチャチE��画面を表示 -->
-        <a href="chatbot.html" target="_blank" style="background-color: #fffccc; color: black;">ChatbotAI</a>
-        <a href="feature1.html">みまくんにつぁE��</a>
-        <a href="feature2.html">製品情報</a>
-        <a href="service1.html">サービス冁E��</a>
-        <a href="mailto:info@robostudy.jp">お問ぁE��わせ</a>
-    </nav>
+    <section id="translation-panel">
+      <select id="translate-direction">
+        <option value="ja-en" selected>日本語→英語</option>
+        <option value="en-ja">英語→日本語</option>
+        <option value="ja-vi">日本語→ベトナム語</option>
+        <option value="vi-ja">ベトナム語→日本語</option>
+        <option value="ja-tl">日本語→タガログ語</option>
+        <option value="tl-ja">タガログ語→日本語</option>
+      </select>
+      <button id="translate-btn" type="button">翻訳して読み上げ</button>
+      <p id="translation-result"></p>
+    </section>
 
-    <!-- ここからチャチE��ボット埋め込みエリア�E�Endex.html では非表示・別ペ�Eジへ誘導！E-->
-    <!--
-    <div style="text-align: center; margin: 40px 0;">
-        <div style="width: 80%; max-width: 600px; margin: 0 auto;">
-            <iframe
-                src="https://flask-chatbot4.onrender.com/"
-                width="80%"
-                height="500"
-                style="border: none; max-width: 600px;"
-                allow="microphone; camera"
-                sandbox="allow-scripts allow-same-origin allow-forms">
-            </iframe>
-        </div>
+    <div id="conv-controls" style="margin:8px 0; display:flex; gap:12px; flex-wrap:wrap;">
+      <label>🤝 会話モード <input id="convMode" type="checkbox"></label>
+      <label>Aの言語:
+        <select id="langA">
+          <option value="ja-JP" selected>日本語</option>
+          <option value="en-US">英語</option>
+          <option value="vi-VN">ベトナム語</option>
+          <option value="fil-PH">タガログ語</option>
+        </select>
+      </label>
+      <label>Bの言語:
+        <select id="langB">
+          <option value="en-US" selected>英語</option>
+          <option value="ja-JP">日本語</option>
+          <option value="vi-VN">ベトナム語</option>
+          <option value="fil-PH">タガログ語</option>
+        </select>
+      </label>
+      <label>🤖 返答案をAIで作る <input id="autoSuggest" type="checkbox" checked></label>
     </div>
-    -->
-    <!-- index.html 上ではコメントアウトしておき、チャチE��表示は chatbot.html に任せる -->
 
-    <main>
-        <section class="hero-section">
-            <h2>AI 技術で人生を豊かに</h2>
-            <p>ロボ�EスタチE��株式会社は、日常を豊かにし社会課題を解決する AI ソリューションを開発してぁE��す。代表製品�E AI みまくんは、人とロボット�E共生を実現する取り絁E��です、E/p>
-        </section>
+    <div id="quick-replies" style="display:flex; gap:8px; flex-wrap:wrap; margin:6px 0;"></div>
 
-        <section class="video-section">
-            <h2>AI みまくんの実演動画</h2>
-            <div class="video-container">
-                <video controls>
-                    <source src="Elderly People Asist in English (1).mp4" type="video/mp4">
-                    お使ぁE�Eブラウザは video タグをサポ�EトしてぁE��せん、E
-                </video>
-            </div>
-        </section>
+    <div class="action-buttons">
+      <button id="save-log-btn" type="button">会話ログ保存</button>
+      <a class="btn" href="/daily_report" target="_blank" rel="noopener">📝 日報を生成</a>
+    </div>
+  </main>
 
-        <div class="features-grid">
-            <div class="feature-card">
-                <h3>24時間見守り</h3>
-                <p>高性能 AI 監視シスチE��で常時健康状態を把握し、異常を早期に検知します。ご家族にも安忁E��お届けします、E/p>
-            </div>
-            <div class="feature-card">
-                <h3>対話機�E</h3>
-                <p>さまざまな話題に対応できる対話能力で、一日を通して楽しくコミュニケーションが取れます、E/p>
-            </div>
-            <div class="feature-card">
-                <h3>簡単操佁E/h3>
-                <p>音声中忁E�Eインターフェースでどなたでも直感的に使える設計です、ETが苦手な方にもおすすめです、E/p>
-            </div>
-        </div>
+  <!-- ==== プリホーム ==== -->
+  <div id="cb-prehome" class="cb-layer" hidden>
+    <div class="cb-wrap">
+      <h1 class="cb-title">どちらを使いますか?</h1>
+      <div class="cb-grid">
+        <button class="cb-card" data-bot="care"> 🤝 介護支援ボット</button>
+        <button class="cb-card" data-bot="tour"> 🧭 翻訳学習/観光案内ボット</button>
+      </div>
+    </div>
+  </div>
 
-        <div class="button-grid">
-            <a href="feature1.html">AI みまくんの特徴</a>
-            <a href="feature2.html">製品詳細</a>
-            <a href="feature3.html">導�E事侁E/a>
-            <a href="service1.html">AI サービス</a>
-            <a href="service2.html">企業惁E��</a>
-        </div>
+  <!-- ==== ホーム（3ボタン） ==== -->
+  <div id="cb-home" class="cb-layer" hidden aria-label="ホームメニュー">
+    <div class="cb-wrap">
+      <h1 id="cb-home-title" class="cb-title"></h1>
+      <div id="cb-home-buttons" class="cb-grid"></div>
+    </div>
+  </div>
+  <button id="cb-home-fab" class="cb-fab" title="ホームへ/ボット切替">🏠</button>
 
-        <div class="pdf-section">
-            <h2>賁E��ダウンローチE/h2>
-            <a href="What is AI・Mimakun.pdf" target="_blank" class="pdf-link">AI みまくんとは (PDF)</a>
-            <a href="Background of AiMimakun.pdf" target="_blank" class="pdf-link">AI みまくんの背景 (PDF)</a>
-            <a href="Company Products.pdf" target="_blank" class="pdf-link">製品一覧 (PDF)</a>
-        </div>
+  <script defer src="/static/js/chatbot.v3.js?v=20250906"></script>
 
-        <div class="image-section">
-            <img src="mimakun_450.png" alt="AI みまくん - あなた�EインチE��ジェント�Eコンパニオン">
-        </div>
-    </main>
+  <!-- プリホーム制御 -->
+  <script>
+  (()=> {
+    const $ = s=>document.querySelector(s);
+    const pre=$('#cb-prehome'), home=$('#cb-home'), fab=$('#cb-home-fab');
+    const title=$('#cb-home-title'), box=$('#cb-home-buttons');
 
-    <footer>
-        <p>&copy; 2024 ロボ�EスタチE��株式会社 All Rights Reserved</p>
-        <div class="contact-info">
-            <p>住所�E�静岡県浜松市中区砂山町1130 ライフインサーラ1407号</p>
-            <p>Email�E�info@robostudy.jp</p>
-            <p>Tel�E�E90-3919-7376</p>
-        </div>
-    </footer>
+    function show(el){ el.hidden=false; }
+    function hide(el){ el.hidden=true; }
+    function hideAll(){ hide(pre); hide(home); }
+
+    // 最初は必ずプリホーム
+    hideAll(); show(pre);
+
+    function goTalk(){ alert("🎤 話す開始（本体機能に接続）"); }
+    function goTranslate(){ alert("🌐 翻訳に移動"); }
+    function goGuide(){ alert("🧭 観光案内に移動"); }
+    function goCheckin(){ alert("✅ 安否確認（仮）"); }
+    function goSettings(){ alert("⚙️ 設定（仮）"); }
+
+    const HOMES = {
+      care:{ title:"介護支援ボット", buttons:[
+        {label:" 🎙️ 話す",action:goTalk},
+        {label:" ✅ 安否確認",action:goCheckin},
+        {label:" ⚙️ 設定",action:goSettings}
+      ]},
+      tour:{ title:"翻訳学習/観光案内ボット", buttons:[
+        {label:" 🎙️ 話す",action:goTalk},
+        {label:" 🌐 翻訳",action:goTranslate},
+        {label:" 🧭 観光案内",action:goGuide}
+      ]}
+    };
+
+    function renderHome(kind){
+      title.textContent=HOMES[kind].title;
+      box.innerHTML='';
+      HOMES[kind].buttons.forEach(b=>{
+        const btn=document.createElement('button');
+        btn.className='cb-big'; btn.textContent=b.label;
+        btn.onclick=()=>{ hideAll(); b.action(); };
+        box.appendChild(btn);
+      });
+    }
+
+    pre.querySelectorAll('[data-bot]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const kind=btn.getAttribute('data-bot');
+        renderHome(kind);
+        hide(pre); show(home);
+      });
+    });
+
+    fab.addEventListener('click', ()=>{ hideAll(); show(pre); });
+  })();
+  </script>
 </body>
 </html>
