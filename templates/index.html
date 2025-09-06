@@ -17,21 +17,24 @@
     /* プリホーム／ホーム */
     /* ---- Prehome visibility hard-fix ---- */
 .cb-layer{
-  position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
-  background: rgba(0,0,0,.45) !important;  /* 背景を暗くして前面をくっきり */
-  z-index: 99999 !important;
+  position:fixed; inset:0;
+  display:flex; align-items:center; justify-content:center;
+  background: rgba(255,255,255,0.95) !important; /* ←白ベースに */
+  z-index: 9999 !important;
   opacity: 1 !important;
+  pointer-events: auto !important;              /* ←クリック可 */
 }
 .cb-wrap{ width:min(720px,92vw); opacity:1 !important; filter:none !important; }
-.cb-title{ color:#111 !important; text-shadow:0 1px 2px rgba(255,255,255,.6); }
+.cb-title{ color:#111 !important; text-shadow:none !important; }
 .cb-grid{ display:grid; gap:14px; }
 .cb-card,.cb-big{
-  height:88px; font-size:1.4rem; font-weight:700;
+  height:88px; font-size:1.2rem; font-weight:700;
   border-radius:16px; border:1px solid #d1d5db !important;
-  background:#fff !important; color:#111 !important; box-shadow:0 8px 24px rgba(0,0,0,.18);
+  background:#fff !important; color:#111 !important;
+  box-shadow:0 8px 24px rgba(0,0,0,.12);
+  cursor:pointer;
 }
 html, body{ filter:none !important; opacity:1 !important; }
-
   </style>
 </head>
 <body>
@@ -138,48 +141,35 @@ html, body{ filter:none !important; opacity:1 !important; }
 
   <script defer src="/static/js/chatbot.v3.js?v=20250906"></script>
 
-<!-- プリホーム制御 -->
+<!-- プリホーム制御（DOM読込後に必ずハンドラ登録） -->
 <script>
-(function(){
-  const $ = s=>document.querySelector(s);
-  const pre=$('#cb-prehome'), home=$('#cb-home'), fab=$('#cb-home-fab');
-  const title=$('#cb-home-title'), box=$('#cb-home-buttons');
+document.addEventListener('DOMContentLoaded', () => {
+  const $ = s => document.querySelector(s);
+  const pre = $('#cb-prehome'), home = $('#cb-home'), fab = $('#cb-home-fab');
+  const title = $('#cb-home-title'), box = $('#cb-home-buttons');
 
-  function show(el){ el.hidden=false; }
-  function hide(el){ el.hidden=true; }
+  function show(el){ if(el) el.hidden=false; }
+  function hide(el){ if(el) el.hidden=true; }
+  function clickSel(sel){ const el=document.querySelector(sel); if(el) el.click(); }
 
-  // ==== 外部JSと結び直した関数 ====
-  function clickSel(sel){
-    const el=document.querySelector(sel);
-    if(el) el.click();
-  }
-
-  // 介護支援ボット: 入力欄にフォーカスしてマイク起動
+  // —— 既存UIと接続
   function goTalk(){
     document.querySelector('#caregiver-input')?.focus();
     clickSel('#mic-caregiver, #micBtn, [data-action="mic"]');
   }
-
-  // 翻訳: 翻訳パネルへスクロール & セレクトにフォーカス
   function goTranslate(){
-    const panel=document.querySelector('#translation-panel');
+    const panel = document.querySelector('#translation-panel');
     panel?.scrollIntoView({behavior:'smooth', block:'start'});
     document.querySelector('#translate-direction')?.focus();
-    // 自動実行したい場合は次行のコメント解除
-    // clickSel('#translate-btn');
+    // clickSel('#translate-btn'); // 自動実行したいなら有効化
   }
-
-  // 観光案内（とりあえず翻訳と同じ処理）
   function goGuide(){
-    const panel=document.querySelector('#translation-panel');
+    const panel = document.querySelector('#translation-panel');
     panel?.scrollIntoView({behavior:'smooth', block:'start'});
   }
-
-  // 仮：イベント発火のみ
   function goCheckin(){ window.dispatchEvent(new CustomEvent('carebot:open-checkin')); }
   function goSettings(){ window.dispatchEvent(new CustomEvent('carebot:open-settings')); }
 
-  // ==== プリホームのメニュー定義 ====
   const HOMES = {
     care:{ title:"介護支援ボット", buttons:[
       {label:" 🎙️ 話す",action:goTalk},
@@ -195,17 +185,18 @@ html, body{ filter:none !important; opacity:1 !important; }
 
   function renderHome(kind){
     title.textContent = HOMES[kind].title;
-    box.innerHTML='';
+    box.innerHTML = '';
     HOMES[kind].buttons.forEach(b=>{
-      const btn=document.createElement('button');
-      btn.className='cb-big';
-      btn.textContent=b.label;
-      btn.onclick=()=>{ hide(pre); show(home); b.action(); };
+      const btn = document.createElement('button');
+      btn.className = 'cb-big';
+      btn.textContent = b.label;
+      btn.addEventListener('click', ()=>{ hide(pre); show(home); b.action(); });
       box.appendChild(btn);
     });
   }
 
-  pre.querySelectorAll('[data-bot]').forEach(btn=>{
+  // 選択ボタンに確実にイベントを付与
+  pre?.querySelectorAll('[data-bot]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       const kind = btn.getAttribute('data-bot');
       renderHome(kind);
@@ -213,8 +204,12 @@ html, body{ filter:none !important; opacity:1 !important; }
     });
   });
 
-  fab.addEventListener('click', ()=>{ hide(home); show(pre); });
-})();
+  // 🏠で戻る
+  fab?.addEventListener('click', ()=>{ hide(home); show(pre); });
+
+  // 最初はプリホームが前面
+  show(pre);
+});
 </script>
 
 </body>
