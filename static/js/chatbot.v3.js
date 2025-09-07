@@ -1,7 +1,7 @@
-// === chatbot.v3.js (v=20250904k, server TTS 強化 + fallback) ===
-console.log("[chatbot.v3.js] v=20250904k");
+// === chatbot.v3.js (clean 完全版) ===
+console.log("[chatbot.v3.js] cleaned for single TTS flow");
 
-// --- iOS/Android 無音対策：初回タップでオーディオ解錠 & 単一Audio ---
+// --- iOS/Android 無音対策 ---
 let __audioUnlocked = false;
 window.addEventListener("touchstart", () => {
   if (__audioUnlocked) return;
@@ -11,28 +11,20 @@ window.addEventListener("touchstart", () => {
   a.play().catch(() => {}).finally(() => { __audioUnlocked = true; });
 }, { once: true });
 
-const __ttsAudio = new Audio();
-__ttsAudio.preload = "auto";
-__ttsAudio.playsInline = true;
-
 // --- サーバーTTS（堅牢版） ---
 async function speakViaServer(text, langCode){
   if (!text) return;
 
-  // 共通: レスポンス→再生（音声か検査）
   async function playFromResponse(res){
     if (!res.ok) throw new Error("TTS HTTP " + res.status);
     const ct = res.headers.get("Content-Type") || "";
     const blob = await res.blob();
-
-    // 音声でなければ、本文を読んで詳細ログを出す
     if (!ct.startsWith("audio/") && !blob.type.startsWith("audio/")) {
       let msg = "";
       try { msg = await (new Response(blob)).text(); } catch(e){}
       console.warn("[TTS] 非音声レスポンス:", { ct, msg: msg?.slice(0,200) });
       throw new Error("TTS returned non-audio content");
     }
-
     const url = URL.createObjectURL(blob);
     try{
       if (typeof window.playTTS === "function"){
@@ -48,7 +40,6 @@ async function speakViaServer(text, langCode){
     }
   }
 
-  // ① JSON POST
   try{
     const r1 = await fetch("/tts", {
       method: "POST",
@@ -57,9 +48,8 @@ async function speakViaServer(text, langCode){
     });
     await playFromResponse(r1);
     return;
-  }catch(e1){ console.warn("[TTS] JSON失敗 → urlencoded へ", e1); }
+  }catch(e1){ console.warn("[TTS] JSON失敗 → urlencoded", e1); }
 
-  // ② x-www-form-urlencoded POST
   try{
     const r2 = await fetch("/tts", {
       method: "POST",
@@ -68,20 +58,17 @@ async function speakViaServer(text, langCode){
     });
     await playFromResponse(r2);
     return;
-  }catch(e2){ console.warn("[TTS] urlencoded失敗 → GET へ", e2); }
+  }catch(e2){ console.warn("[TTS] urlencoded失敗 → GET", e2); }
 
-  // ③ GET（/tts?text=...&lang=...）にフォールバック
   try{
-    // 直接 Audio に食わせる（サーバがストリーム返却する実装向け）
     const url = `/tts?text=${encodeURIComponent(text)}&lang=${encodeURIComponent(langCode)}&t=${Date.now()}`;
     const a = new Audio(url);
     a.playsInline = true;
     a.muted = false;
-    await a.play(); // ここでCTが非音声だと NotSupportedError → 最後の砦へ
+    await a.play();
     return;
-  }catch(e3){ console.warn("[TTS] GET失敗 → speechSynthesis へ", e3); }
+  }catch(e3){ console.warn("[TTS] GET失敗 → speechSynthesis", e3); }
 
-  // ④ 最後の砦：ブラウザTTS
   try{
     const u = new SpeechSynthesisUtterance(text);
     const ok = ["ja-JP","en-US","vi-VN","fil-PH"];
@@ -96,8 +83,6 @@ async function speakViaServer(text, langCode){
 
 // ===== ユーティリティ =====
 const $ = (sel) => document.querySelector(sel);
-
-// サーバ応答からテキストを安全に取り出す
 function pickText(data){
   if (!data) return "";
   if (typeof data === "string") return data;
@@ -108,18 +93,16 @@ function pickText(data){
   );
 }
 
-// ===== 画面メッセージ（日本語はモバイル時のみサーバーTTSへフォールバック） =====
+// ===== メッセージ表示 =====
 function speak(text, role){
   if (!text) return;
   const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
   if (isMobile) { speakViaServer(text, "ja-JP"); return; }
-  // PCは軽量なブラウザTTS
   const u = new SpeechSynthesisUtterance(text);
   u.volume = 1.0; u.rate = 1.0; u.lang = "ja-JP";
   window.speechSynthesis.cancel();
   window.speechSynthesis.speak(u);
 }
-
 function appendMessage(role, text){
   const chatWindow = $("#chat-window");
   const div = document.createElement("div");
@@ -147,7 +130,6 @@ const careeResponses = {
   "睡眠": ["よく眠れました","途中で目が覚めました","眠気があります","眠れませんでした"],
   "排便": ["普通でした","少し便秘気味です","下痢でした","昨日ありました"]
 };
-
 function showTemplates(role, category = null){
   const templateContainer = $("#template-buttons");
   templateContainer.innerHTML = "";
@@ -187,7 +169,7 @@ function setupMic(btn, input){
       rec.onresult = e => input.value = e.results[0][0].transcript;
       rec.start();
     }catch(err){
-      console.warn("SpeechRecognition not supported or blocked.", err);
+      console.warn("SpeechRecognition not supported.", err);
       alert("このブラウザでは音声入力が使えない可能性があります。");
     }
   });
@@ -207,27 +189,6 @@ async function fetchExplain(term){
       if (text) return text;
     }
   }catch(e){}
-  try{
-    const res = await fetch("/ja/explain", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
-      body: new URLSearchParams({ term, maxLength: 30 })
-    });
-    const data = await res.json().catch(() => ({}));
-    if (res.ok){
-      const text = pickText(data);
-      if (text) return text;
-    }
-  }catch(e){}
-  try{
-    const url = `/ja/explain?term=${encodeURIComponent(term)}&maxLength=30`;
-    const res = await fetch(url, { method: "GET" });
-    const data = await res.json().catch(() => ({}));
-    if (res.ok){
-      const text = pickText(data);
-      if (text) return text;
-    }
-  }catch(e){}
   return "";
 }
 
@@ -241,111 +202,10 @@ async function fetchTranslate(text, direction){
   return res.json();
 }
 
-// ===== 会話ログ保存 =====
-async function saveLog(){
-  const chatWindow = $("#chat-window");
-  const log = chatWindow?.innerText?.trim();
-  if (!log){ alert("会話がありません"); return; }
-  const ts = new Date().toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" });
-  const logWithTime = `[${ts}]\n${log}`;
-  try{
-    const res = await fetch("/ja/save_log", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ log: logWithTime })
-    });
-    const data = await res.json().catch(() => ({}));
-    if (data && (data.status === "success" || data.ok)) alert("会話ログを保存しました。");
-    else alert("保存に失敗しました。");
-  }catch(e){ console.error(e); alert("エラーが発生しました。"); }
-}
-
-// === 往復会話モード: 状態とユーティリティ ===
-let dialogue = [];               // {speaker:'A'|'B', text, lang}
-let currentSpeaker = 'A';
-
-const elConv   = document.getElementById('convMode');
-const elLangA  = document.getElementById('langA');
-const elLangB  = document.getElementById('langB');
-const elQR     = document.getElementById('quick-replies');
-const elAuto   = document.getElementById('autoSuggest');
-
-function otherOf(s){ return s === 'A' ? 'B' : 'A'; }
-function langOf(s){ return s === 'A' ? (elLangA?.value || 'ja-JP') : (elLangB?.value || 'en-US'); }
-function toShort(lang){ return (lang || '').split('-')[0].toLowerCase(); }
-
-// direction 文字列（/ja/translate 用）を作る
-function makeDirection(srcLang, dstLang){
-  const m = { 'ja':'ja', 'en':'en', 'vi':'vi', 'fil':'tl', 'tl':'tl' };
-  const s = m[toShort(srcLang)] || 'ja';
-  const d = m[toShort(dstLang)] || 'en';
-  return `${s}-${d}`;
-}
-
-async function addTurnAndSpeak(speaker, text){
-  const srcLang = langOf(speaker);
-  const dstSpeaker = otherOf(speaker);
-  const dstLang = langOf(dstSpeaker);
-
-  dialogue.push({ speaker, text, lang: srcLang });
-
-  // 画面に表示（元発話）
-  appendMessage(speaker === 'A' ? 'caregiver' : 'caree', text);
-
-  // 翻訳
-  const direction = makeDirection(srcLang, dstLang);
-  const res = await fetch('/ja/translate', {
-    method: 'POST',
-    headers: { 'Content-Type':'application/json' },
-    body: JSON.stringify({ text, direction })
-  });
-  const j = await res.json().catch(()=>({}));
-  const translated = (j.translated || j.text || '').trim();
-
-  // 相手側に表示→音声再生
-  appendMessage(dstSpeaker === 'A' ? 'caregiver' : 'caree', translated);
-  await speakViaServer(translated, dstLang);
-
-  // 次のターンへ & 返答案
-  currentSpeaker = dstSpeaker;
-  renderQuickReplies(dstSpeaker);
-}
-
-async function renderQuickReplies(forSpeaker){
-  if (!elQR) return;
-  elQR.innerHTML = '';
-  let suggestions = [];
-
-  if (elAuto?.checked){
-    try{
-      const ctx = dialogue.slice(-6);
-      const r = await fetch('/ja/suggest', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ dialogue: ctx, target_lang: langOf(forSpeaker), n: 3 })
-      });
-      const j = await r.json().catch(()=>({}));
-      suggestions = j.suggestions || [];
-    }catch(e){}
-  }
-  if (!suggestions.length){
-    suggestions = ["はい、わかりました。","もう少し詳しく教えてください。","おすすめはありますか？"];
-  }
-
-  suggestions.forEach(s => {
-    const b = document.createElement('button');
-    b.textContent = s;
-    b.className = 'chip';
-    b.onclick = () => addTurnAndSpeak(forSpeaker, s);
-    elQR.appendChild(b);
-  });
-}
-
 // ===== エントリーポイント =====
 document.addEventListener("DOMContentLoaded", () => {
   console.log("👉 スクリプト開始");
 
-  // 要素
   const caregiverInput = $("#caregiver-input");
   const careeInput = $("#caree-input");
   const caregiverSend = $("#send-caregiver");
@@ -357,38 +217,25 @@ document.addEventListener("DOMContentLoaded", () => {
   const caregiverMic = $("#mic-caregiver");
   const careeMic = $("#mic-caree");
 
-  // 送信ボタン
   caregiverSend?.addEventListener("click", async () => {
     const v = caregiverInput?.value?.trim();
     if (!v) return;
-    if (elConv?.checked) {
-      await addTurnAndSpeak('A', v);
-    } else {
-      appendMessage("caregiver", v);
-    }
+    appendMessage("caregiver", v);
     caregiverInput.value = "";
   });
-
   careeSend?.addEventListener("click", async () => {
     const v = careeInput?.value?.trim();
     if (!v) return;
-    if (elConv?.checked) {
-      await addTurnAndSpeak('B', v);
-    } else {
-      appendMessage("caree", v);
-    }
+    appendMessage("caree", v);
     careeInput.value = "";
   });
 
-  // マイク
   setupMic(caregiverMic, caregiverInput);
   setupMic(careeMic, careeInput);
 
-  // 用語説明
   explainBtn?.addEventListener("click", async () => {
-    const termInput = $("#term");
+    const term = $("#term")?.value?.trim();
     const out = $("#explanation");
-    const term = termInput?.value?.trim();
     if (!term){ alert("用語を入力してください"); return; }
     explainBtn.disabled = true;
     out.textContent = "";
@@ -396,15 +243,12 @@ document.addEventListener("DOMContentLoaded", () => {
       const text = await fetchExplain(term);
       out.textContent = (text && String(text).trim()) || "(取得できませんでした)";
       if (text) speak(text, "caregiver");
-    }catch(err){
-      console.error("[explain] error:", err);
-      alert("用語説明に失敗しました");
     }finally{
       explainBtn.disabled = false;
     }
   });
 
-  // 翻訳→読み上げ
+  // 翻訳→ネイティブ音声読み上げ
   translateBtn?.addEventListener("click", async () => {
     const src = $("#explanation")?.textContent?.trim();
     if (!src){ alert("先に用語説明を入れてください"); return; }
@@ -424,116 +268,10 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // 会話ログ保存
-  saveBtn?.addEventListener("click", saveLog);
-
-  // テンプレ開始（a要素のデフォルト遷移を抑止）
+  saveBtn?.addEventListener("click", () => { /* 未実装 */ });
   templateStartBtn?.addEventListener("click", (e) => {
     e.preventDefault();
     templateStartBtn.style.display = "none";
     showTemplates("caregiver");
   });
-
-  // 会話モード切替
-  elConv?.addEventListener("change", () => {
-    if (elConv.checked) {
-      currentSpeaker = 'A';
-      renderQuickReplies('A');
-    } else {
-      elQR && (elQR.innerHTML = "");
-    }
-  });
 });
-
-// ====== 録画 → サーバ保存 → 再生（PC安定版） ======
-let mediaRecorder = null;
-let recordedChunks = [];
-
-// 録画開始
-async function startRecording() {
-  recordedChunks = [];
-  const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-  const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
-    ? "video/webm;codecs=vp9"
-    : (MediaRecorder.isTypeSupported("video/webm;codecs=vp8") ? "video/webm;codecs=vp8" : "video/webm");
-  mediaRecorder = new MediaRecorder(stream, { mimeType });
-  mediaRecorder.ondataavailable = (e) => { if (e.data && e.data.size > 0) recordedChunks.push(e.data); };
-  mediaRecorder.start();
-}
-
-// 録画停止 → アップロード
-async function stopAndSaveRecording() {
-  return new Promise((resolve, reject) => {
-    if (!mediaRecorder) return reject("not recording");
-    mediaRecorder.onstop = async () => {
-      const blob = new Blob(recordedChunks, { type: "video/webm" });
-      try {
-        const url = await uploadRecordedBlob(blob);
-        resolve(url);
-      } catch (e) { reject(e); }
-    };
-    mediaRecorder.stop();
-  });
-}
-
-// サーバーに送信（/upload_video, フィールド名は "video"）
-async function uploadRecordedBlob(blob) {
-  const fd = new FormData();
-  fd.append("video", blob, "recording.webm");
-  const res = await fetch("/upload_video", { method: "POST", body: fd });
-  const data = await res.json();
-  if (!res.ok || !data.ok) { console.error("Upload failed:", data); throw new Error(data.error || "upload-failed"); }
-  const player = document.getElementById("savedVideo");
-  if (player) {
-    player.src = data.url;
-    player.load();
-    try { await player.play(); } catch (_) {}
-  }
-  return data.url;
-}
-
-// 任意：ボタン結線（存在する場合のみ）
-document.getElementById("startRecordBtn")?.addEventListener("click", () => {
-  startRecording().catch(err => alert("録画開始失敗: " + err));
-});
-document.getElementById("stopSaveBtn")?.addEventListener("click", async () => {
-  try { await stopAndSaveRecording(); alert("保存しました"); }
-  catch (e) { alert("保存失敗: " + e.message); }
-});
-
-// === robust playTTS override (force-stable) ===
-window.playTTS = async function playTTS(srcOrBlob){
-  try{
-    let src = srcOrBlob;
-    if (srcOrBlob instanceof Blob) src = URL.createObjectURL(srcOrBlob);
-
-    let el = document.getElementById('tts-audio');
-    if (!el) {
-      el = document.createElement('audio');
-      el.id = 'tts-audio';
-      el.playsInline = true;
-      document.body.appendChild(el);
-    }
-    el.muted = false;
-    el.src = (typeof src === 'string' ? src : URL.createObjectURL(src)) +
-             (String(src).includes('?') ? '&' : '?') + 't=' + Date.now();
-
-    await el.play();
-  } catch (e){
-    console.warn('playTTS failed, fallback to raw Audio()', e);
-    try{
-      const a = new Audio(typeof srcOrBlob === 'string' ? srcOrBlob : URL.createObjectURL(srcOrBlob));
-      a.playsInline = true;
-      a.muted = false;
-      await a.play();
-    } catch (ee){
-      console.error('Audio fallback failed', ee);
-      if (window.__lastTranslatedText) {
-        const u = new SpeechSynthesisUtterance(window.__lastTranslatedText);
-        u.lang = 'ja-JP'; u.rate = 1.0; u.volume = 1.0;
-        speechSynthesis.cancel(); speechSynthesis.speak(u);
-      }
-    }
-  }
-};
-
