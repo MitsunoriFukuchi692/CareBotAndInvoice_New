@@ -44,7 +44,27 @@
       cursor:pointer; overflow:hidden !important; position:relative !important;
     }
     .cb-card::before,.cb-card::after,.cb-big::before,.cb-big::after{ content:none !important; display:none !important; }
-  </style>
+</style> 
+
+<style>
+  /* クリック感（最小） */
+  .btn, .cb-card, .cb-big, .chip, button {
+    cursor: pointer;
+    transition: transform .02s ease, box-shadow .2s ease;
+  }
+  .btn:active, .cb-card:active, .cb-big:active, button:active {
+    transform: translateY(1px);
+  }
+
+  /* 右下の🏠 FABが常に見えるように */
+  .cb-fab{
+    position: fixed; right: 16px; bottom: 16px;
+    width: 56px; height: 56px; border-radius: 50%;
+    background:#fff; box-shadow:0 6px 20px rgba(0,0,0,.2);
+    border:1px solid #e5e7eb; font-size:22px;
+  }
+</style>
+
 </head>
 <body>
   <header>
@@ -148,7 +168,8 @@
   <button id="cb-home-fab" class="cb-fab" title="ホームへ/ボット切替">🏠</button>
 
   <!-- 既存の外部JS -->
-  <script defer src="/static/js/chatbot.v3.js?v=20250906"></script>
+  <script defer src="{{ url_for('static', filename='js/chatbot.v3.js') }}?v=20250906"
+        onerror="alert('フロントJSの読み込みに失敗しました（path/CORS/ネットワーク）。');"></script>
 
   <!-- プリホーム制御（DOM読込後） -->
   <script>
@@ -217,5 +238,22 @@
     show(pre);
   });
   </script>
+<script>
+
+  // 10秒で自動的にプリホーム（覆い）を閉じる（保険）
+  setTimeout(() => {
+    const pre = document.getElementById('cb-prehome');
+    if (pre && !pre.hidden) pre.hidden = true;
+  }, 10000);
+
+  // Escキーでいつでも覆いを閉じる（非常口）
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      const pre = document.getElementById('cb-prehome');
+      if (pre && !pre.hidden) pre.hidden = true;
+    }
+  });
+</script>
+
 </body>
 </html>
