@@ -65,6 +65,11 @@
   }
 </style>
 
+<style id="hotfix-prehome">
+  /* 覆いを常に消す（まず動かすための暫定対処） */
+  #cb-prehome, .cb-layer { display: none !important; pointer-events: none !important; }
+</style>
+
 </head>
 <body>
   <header>
@@ -173,6 +178,18 @@
 
   <!-- プリホーム制御（DOM読込後） -->
   <script>
+    // DOM生成後に、もし残っていたら確実に消す
+    document.addEventListener('DOMContentLoaded', () => {
+      const pre = document.getElementById('cb-prehome');
+      if (pre) { pre.hidden = true; pre.style.display = 'none'; pre.style.pointerEvents = 'none'; }
+     document.querySelectorAll('.cb-layer').forEach(el => {
+       el.style.display = 'none'; el.style.pointerEvents = 'none';
+       el.removeAttribute('aria-modal'); el.removeAttribute('role');
+    });
+  });
+  </script> 
+
+  <script>
   document.addEventListener('DOMContentLoaded', () => {
     const $ = s => document.querySelector(s);
     const pre = $('#cb-prehome'), home = $('#cb-home'), fab = $('#cb-home-fab');
@@ -232,11 +249,8 @@
         hide(pre); show(home);
       });
     });
-    fab?.addEventListener('click', ()=>{ hide(home); show(pre); });
 
-    // 最前面で必ず見える
-    show(pre);
-  });
+      });
   </script>
 <script>
 
