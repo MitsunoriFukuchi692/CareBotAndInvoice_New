@@ -1,7 +1,6 @@
-// === static/js/chatbot.v3.js (A->B固定・二度目以降も戻らない版) ===
-console.log("[chatbot.v3.js] A->B fixed direction, explicit src/dst, correct TTS lang");
+// === static/js/chatbot.v3.js (A→B固定 + 失敗検出リトライ版) ===
+console.log("[chatbot.v3.js] fixed A->B + strict translate + TTS dst");
 
-// ---- 無音対策（mobile） ----
 let __audioUnlocked = false;
 window.addEventListener("touchstart", () => {
   if (__audioUnlocked) return;
@@ -9,22 +8,20 @@ window.addEventListener("touchstart", () => {
   a.play().catch(()=>{}).finally(()=>{ __audioUnlocked = true; });
 }, { once:true });
 
-// ---- 共通 ----
 const $ = s => document.querySelector(s);
 const shortMap = { ja:"ja", en:"en", vi:"vi", tl:"tl", fil:"tl" };
 const bcpMap   = { ja:"ja-JP", en:"en-US", vi:"vi-VN", tl:"fil-PH", fil:"fil-PH" };
 const toShort  = s => (s||"").split("-")[0].toLowerCase();
 
-// UIの #langA / #langB を常に参照（A→B 固定）
 function getFixedPair(){
   const a = $("#langA")?.value || "ja-JP";
   const b = $("#langB")?.value || "en-US";
   const sA = shortMap[toShort(a)] || "ja";
   const sB = shortMap[toShort(b)] || "en";
-  return { srcBCP: a, dstBCP: bcpMap[sB] || b, srcShort: sA, dstShort: sB };
+  return { srcBCP:a, dstBCP:(bcpMap[sB]||b), srcShort:sA, dstShort:sB };
 }
 
-// ---- サーバーTTS ----
+// ---------- TTS ----------
 async function speakViaServer(text, langBCP){
   if (!text) return;
   try{
@@ -32,28 +29,27 @@ async function speakViaServer(text, langBCP){
       method:"POST", headers:{ "Content-Type":"application/json" },
       body: JSON.stringify({ text, lang: langBCP })
     });
-    if (!r.ok) throw new Error("TTS HTTP " + r.status);
+    if (!r.ok) throw new Error("TTS HTTP "+r.status);
     const blob = await r.blob(); const url = URL.createObjectURL(blob);
-    try { const a = new Audio(url); a.playsInline = true; await a.play(); }
-    finally { URL.revokeObjectURL(url); }
+    try{ const a=new Audio(url); a.playsInline=true; await a.play(); }
+    finally{ URL.revokeObjectURL(url); }
   }catch{
-    // fallback: ブラウザTTS
     const u = new SpeechSynthesisUtterance(text);
     u.lang = langBCP || "ja-JP";
     speechSynthesis.cancel(); speechSynthesis.speak(u);
   }
 }
 
-// ---- 表示 ----
+// ---------- UI表示 ----------
 function appendMessage(role, text){
   const pane = $("#chat-window"); if (!pane) return;
   const div = document.createElement("div");
-  div.className = "message " + (role === "caregiver" ? "caregiver" : "caree");
-  div.textContent = (role==="caregiver"?"介護士: ":"被介護者: ")+text;
+  div.className = "message " + (role==="caregiver"?"caregiver":"caree");
+  div.textContent = (role==="caregiver"?"介護士: ":"被介護者: ") + text;
   pane.appendChild(div); pane.scrollTop = pane.scrollHeight;
 }
 
-// ---- テンプレ ----
+// ---------- テンプレ ----------
 const caregiverTemplates = {
   "体調":["今日は元気ですか？","どこか痛いところはありますか？","疲れは残っていますか？","最近の体温はどうですか？"],
   "食事":["朝ごはんは食べましたか？","食欲はありますか？","最近食べた美味しかったものは？","食事の量は十分でしたか？"],
@@ -91,7 +87,7 @@ function showTemplates(role, category=null){
   });
 }
 
-// ---- 音声入力 ----
+// ---------- 音声入力 ----------
 function setupMic(btn, input){
   if (!btn || !input) return;
   btn.addEventListener("click", ()=>{
@@ -102,42 +98,55 @@ function setupMic(btn, input){
   });
 }
 
-// ---- 用語説明 ----
-async function fetchExplain(term){
-  const r = await fetch("/ja/explain", {
-    method:"POST", headers:{ "Content-Type":"application/json" },
-    body: JSON.stringify({ term, maxLength:30 })
-  });
-  const j = await r.json().catch(()=>({})); return r.ok ? (j.explanation||j.text||"") : "";
+// ---------- 翻訳（厳格抽出 + 失敗時リトライ） ----------
+function extractTranslated(obj){
+  if (!obj) return "";
+  // サーバの様々な返却形に対応
+  return (
+    obj.dst_text ||
+    obj.translated ||
+    obj.translatedText ||
+    obj.data?.translations?.[0]?.translatedText ||
+    obj.choices?.[0]?.message?.content ||
+    obj.text || ""
+  );
+}
+function sameAfterNormalize(a,b){
+  const n = s => (s||"").replace(/\s+/g,"").replace(/[、。,.!?！？]/g,"");
+  return n(a) === n(b);
+}
+async function apiTranslateStrict(text, srcShort, dstShort, maxRetry=1){
+  for (let i=0;i<=maxRetry;i++){
+    const r = await fetch("/ja/translate", {
+      method:"POST", headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ text, src: srcShort, dst: dstShort, force:true, retry:i })
+    });
+    const j = await r.json().catch(()=>({}));
+    const out = extractTranslated(j);
+    if (out && !sameAfterNormalize(out, text)) return out;
+    // 小さな待機 → 再試行
+    await new Promise(res => setTimeout(res, 180));
+  }
+  return ""; // 最終的に失敗
 }
 
-// ---- 翻訳 API（毎回 src/dst 明示）----
-async function apiTranslate(text, srcShort, dstShort){
-  const r = await fetch("/ja/translate", {
-    method:"POST", headers:{ "Content-Type":"application/json" },
-    body: JSON.stringify({ text, src: srcShort, dst: dstShort })
-  });
-  return r.json();
-}
-
-// ---- A/B往復（翻訳方向は固定）----
+// ---------- A/B往復（方向固定） ----------
 let currentSpeaker = "A";
 const other = s=> s==="A"?"B":"A";
 
 async function addTurnAndSpeak(speaker, text){
-  const { srcShort, dstShort, dstBCP } = getFixedPair(); // ★常にA→B
+  const { srcShort, dstShort, dstBCP } = getFixedPair(); // 常にA→B
   appendMessage(speaker==="A"?"caregiver":"caree", text);
 
-  const j = await apiTranslate(text, srcShort, dstShort).catch(()=>({}));
-  const translated = (j.dst_text || j.translated || j.text || "").trim();
+  const translated = await apiTranslateStrict(text, srcShort, dstShort, 2);
   const dstRole = other(speaker)==="A" ? "caregiver" : "caree";
   appendMessage(dstRole, translated || "(翻訳できませんでした)");
 
-  if (translated) await speakViaServer(translated, dstBCP); // ★必ずdstで再生
-  currentSpeaker = other(speaker); // 表示上の交代のみ（方向は固定）
+  if (translated) await speakViaServer(translated, dstBCP);
+  currentSpeaker = other(speaker);
 }
 
-// ---- 起動 ----
+// ---------- 起動 ----------
 document.addEventListener("DOMContentLoaded", ()=>{
   const caregiverInput = $("#caregiver-input");
   const careeInput     = $("#caree-input");
@@ -168,17 +177,25 @@ document.addEventListener("DOMContentLoaded", ()=>{
     const term = $("#term")?.value?.trim(); const out = $("#explanation");
     if (!term){ alert("用語を入力してください"); return; }
     explainBtn.disabled = true; out.textContent = "";
-    try { const text = await fetchExplain(term); out.textContent = text || "(取得できませんでした)"; if (text) await speakViaServer(text, "ja-JP"); }
-    finally { explainBtn.disabled = false; }
+    try {
+      const r = await fetch("/ja/explain", {
+        method:"POST", headers:{ "Content-Type":"application/json" },
+        body: JSON.stringify({ term, maxLength:30 })
+      });
+      const j = await r.json().catch(()=>({}));
+      const text = j.explanation || j.text || "";
+      out.textContent = text || "(取得できませんでした)";
+      if (text) await speakViaServer(text, "ja-JP");
+    } finally { explainBtn.disabled = false; }
   });
 
-  // 単発翻訳ボタンも固定方向で
+  // 単発翻訳（固定方向）
   translateBtn?.addEventListener("click", async ()=>{
-    const s = $("#explanation")?.textContent?.trim(); if (!s){ alert("先に用語説明を入れてください"); return; }
+    const s = $("#explanation")?.textContent?.trim();
+    if (!s){ alert("先に用語説明を入れてください"); return; }
     const fp = getFixedPair();
     try{
-      const data = await apiTranslate(s, fp.srcShort, fp.dstShort);
-      const out = (data.dst_text || data.translated || data.text || "");
+      const out = await apiTranslateStrict(s, fp.srcShort, fp.dstShort, 2);
       $("#translation-result").textContent = out || "(翻訳できませんでした)";
       if (out) await speakViaServer(out, fp.dstBCP);
     }catch{ alert("翻訳に失敗しました"); }
