@@ -1,27 +1,49 @@
-// === static/js/chatbot.v3.js — RESCUE4 ===
-// ・ページ自動判定: /translate は A(原文)→B(訳)の言語で読み上げ
-// ・テンプレクリックでも必ず読み上げ
-// ・MutationObserver を document 全体に張って、外部追加メッセージも読み上げ
-console.log("[chatbot.v3.js] RESCUE4: per-page speak logic + template speak + wide observe");
+// === static/js/chatbot.v3.js — RESCUE5 ===
+// ・A→B固定で src/dst 明示
+// ・読み上げは MutationObserver のみ（重複読み上げを排除）
+// ・/translate では caregiver=A言語, caree=B言語で読み上げ
+// ・言語エイリアス（日本語名→BCP47, vi/tl対応）
+
+console.log("[chatbot.v3.js] RESCUE5: single speak via observer, robust lang mapping");
 
 const $ = s => document.querySelector(s);
-const shortMap = { ja:"ja", en:"en", vi:"vi", tl:"tl", fil:"tl" };
-const bcpMap   = { ja:"ja-JP", en:"en-US", vi:"vi-VN", tl:"fil-PH", fil:"fil-PH" };
 const toShort  = s => (s||"").split("-")[0].toLowerCase();
-const isGuidePage = location.pathname.includes("/translate"); // 翻訳学習／観光案内なら true
+
+const aliasBCP = {
+  "日本語":"ja-JP","英語":"en-US","ベトナム語":"vi-VN","タガログ語":"fil-PH","フィリピン語":"fil-PH",
+  "ja":"ja-JP","ja-jp":"ja-JP","en":"en-US","en-us":"en-US","vi":"vi-VN","vi-vn":"vi-VN","tl":"fil-PH","fil":"fil-PH","fil-ph":"fil-PH"
+};
+const bcpMap   = { ja:"ja-JP", en:"en-US", vi:"vi-VN", tl:"fil-PH", fil:"fil-PH" };
+const shortMap = { ja:"ja", en:"en", vi:"vi", tl:"tl", fil:"tl" };
+
+// ページ種別
+const isGuidePage = location.pathname.includes("/translate"); // 翻訳学習／観光案内ページなら true
+
+function normBCP(v, fallback){
+  const t = (v||"").trim();
+  if (aliasBCP[t]) return aliasBCP[t];
+  const key = toShort(t);
+  return aliasBCP[key] || t || fallback;
+}
 
 function getFixedPair(){
-  const a = $("#langA")?.value || "ja-JP";
-  const b = $("#langB")?.value || "en-US";
+  const a0 = $("#langA")?.value || "ja-JP";
+  const b0 = $("#langB")?.value || "en-US";
+  const a = normBCP(a0, "ja-JP");
+  const b = normBCP(b0, "en-US");
   const sA = shortMap[toShort(a)] || "ja";
   const sB = shortMap[toShort(b)] || "en";
   return {
-    srcBCP:a, dstBCP:(bcpMap[sB]||b), srcShort:sA, dstShort:sB,
-    aBCP:(bcpMap[sA]||a), bBCP:(bcpMap[sB]||b)
+    srcBCP: a,
+    dstBCP: bcpMap[sB] || b,
+    srcShort: sA,
+    dstShort: sB,
+    aBCP: bcpMap[sA] || a,
+    bBCP: bcpMap[sB] || b
   };
 }
 
-// ---- 音声: /tts → 失敗時はブラウザTTS ----
+// ---- TTS: /tts → 失敗時ブラウザ ----
 async function speakSmart(text, langBCP){
   if (!text) return;
   try{
@@ -35,7 +57,7 @@ async function speakSmart(text, langBCP){
   try{ speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(text); u.lang=langBCP||"ja-JP"; speechSynthesis.speak(u);}catch{}
 }
 
-// ---- 表示補助 ----
+// ---- 表示ヘルパ ----
 function appendMessage(role, text){
   const pane = $("#chat-window") || document.body;
   const div = document.createElement("div");
@@ -43,10 +65,11 @@ function appendMessage(role, text){
   div.textContent = (role==="caregiver"?"介護士: ":"被介護者: ") + text;
   pane.appendChild(div);
   if (pane.scrollTop!=null) pane.scrollTop = pane.scrollHeight || pane.scrollTop;
+  // 監視で判定するためフラグ初期化
   div.dataset.spoken = "0";
 }
 
-// ---- 用語説明＆翻訳 ----
+// ---- API ----
 async function fetchExplain(term){
   const r = await fetch("/ja/explain",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({term,maxLength:30})});
   const j = await r.json().catch(()=>({})); return r.ok ? (j.explanation||j.text||"") : "";
@@ -56,24 +79,20 @@ async function apiTranslate(text, srcShort, dstShort){
   return r.json();
 }
 
-// ---- A/B往復 ----
-let currentSpeaker = "A";
+// ---- 会話（A→B固定。読み上げはObserverに任せる）----
 const other = s=> s==="A"?"B":"A";
 async function addTurnAndSpeak(speaker, text){
-  const { srcShort, dstShort, dstBCP } = getFixedPair();
+  const { srcShort, dstShort } = getFixedPair();
   appendMessage(speaker==="A"?"caregiver":"caree", text);
 
-  let translated = "";
+  let translated="";
   try{ const j = await apiTranslate(text, srcShort, dstShort);
        translated = (j.dst_text || j.translated || j.text || "").trim();
   }catch{}
-  const dstRole = other(speaker)==="A" ? "caregiver" : "caree";
-  appendMessage(dstRole, translated || "(翻訳できませんでした)");
-  await speakSmart(translated || text, dstBCP);
-  currentSpeaker = other(speaker);
+  appendMessage(other(speaker)==="A"?"caregiver":"caree", translated || "(翻訳できませんでした)");
 }
 
-// ---- テンプレ（クリックで必ず読み上げ）----
+// ---- テンプレ（クリック→表示のみ。読み上げはObserver）----
 const caregiverTemplates = {
   "体調":["今日は元気ですか？","どこか痛いところはありますか？","疲れは残っていますか？","最近の体温はどうですか？"],
   "食事":["朝ごはんは食べましたか？","食欲はありますか？","最近食べた美味しかったものは？","食事の量は十分でしたか？"],
@@ -103,21 +122,14 @@ function showTemplates(role, category=null){
   box.className = "template-buttons "+(role==="caregiver"?"caregiver":"caree");
   list.forEach(t=>{
     const b=document.createElement("button"); b.textContent=t;
-    b.onclick=async ()=>{
-      appendMessage(role,t);
-      const { aBCP, bBCP } = getFixedPair();
-      // 介護支援: どちらも日本語 / 翻訳学習: caregiver→A言語, caree→B言語
-      const lang = isGuidePage ? (role==="caregiver" ? aBCP : bBCP) : aBCP;
-      await speakSmart(t, lang);
-      if (role==="caregiver") showTemplates("caree",category); else showTemplates("caregiver");
-    };
+    b.onclick=()=>{ appendMessage(role,t); if (role==="caregiver") showTemplates("caree",category); else showTemplates("caregiver"); };
     box.appendChild(b);
   });
 }
 
-// ---- 新規メッセージ自動読み上げ（広域監視）----
+// ---- 新規メッセージ自動読み上げ（唯一の読み上げ経路）----
 function installMessageObserver(){
-  const target = document.body;                 // ページ全体を監視
+  const target = document.body;
   const obs = new MutationObserver((mutList)=>{
     const { aBCP, bBCP } = getFixedPair();
     for (const m of mutList){
@@ -126,10 +138,10 @@ function installMessageObserver(){
         if (!node.classList.contains("message")) return;
         if (node.dataset.spoken === "1") return;
         const isCaregiver = node.classList.contains("caregiver");
-        // ページ別言語
-        const lang = isGuidePage ? (isCaregiver ? aBCP : bBCP) : aBCP;
         const text = (node.textContent || "").replace(/^.+?:\s*/, "").trim();
         if (!text) return;
+        // 介護支援: 両方日本語 / 翻訳学習: caregiver=A, caree=B
+        const lang = isGuidePage ? (isCaregiver ? aBCP : bBCP) : aBCP;
         node.dataset.spoken = "1";
         await speakSmart(text, lang);
       });
@@ -138,7 +150,7 @@ function installMessageObserver(){
   obs.observe(target, { childList:true, subtree:true });
 }
 
-// ---- 起動バインド ----
+// ---- 起動 ----
 document.addEventListener("DOMContentLoaded", ()=>{
   const caregiverInput = $("#caregiver-input");
   const careeInput     = $("#caree-input");
@@ -150,15 +162,13 @@ document.addEventListener("DOMContentLoaded", ()=>{
 
   caregiverSend?.addEventListener("click", async ()=>{
     const v = caregiverInput?.value?.trim(); if (!v) return;
-    if ($("#convMode")?.checked) await addTurnAndSpeak("A", v);
-    else { appendMessage("caregiver", v); const {aBCP}=getFixedPair(); await speakSmart(v, isGuidePage?aBCP:aBCP); }
+    if ($("#convMode")?.checked) await addTurnAndSpeak("A", v); else appendMessage("caregiver", v);
     caregiverInput.value = "";
   });
 
   careeSend?.addEventListener("click", async ()=>{
     const v = careeInput?.value?.trim(); if (!v) return;
-    if ($("#convMode")?.checked) await addTurnAndSpeak("B", v);
-    else { appendMessage("caree", v); const {aBCP,bBCP}=getFixedPair(); await speakSmart(v, isGuidePage?bBCP:aBCP); }
+    if ($("#convMode")?.checked) await addTurnAndSpeak("B", v); else appendMessage("caree", v);
     careeInput.value = "";
   });
 
@@ -169,7 +179,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
     try{
       const text = await fetchExplain(term);
       $("#explanation").textContent = text || "(取得できませんでした)";
-      if (text) await speakSmart(text, "ja-JP");
+      if (text) await speakSmart(text, "ja-JP"); // 説明は画面外要素なのでここで直接読む
     }finally{ explainBtn.disabled = false; }
   });
 
@@ -190,10 +200,10 @@ document.addEventListener("DOMContentLoaded", ()=>{
     let out = "";
     try{ const j = await apiTranslate(srcText, srcShort, dstShort); out = (j.dst_text || j.translated || j.text || "").trim(); }catch{}
     $("#translation-result").textContent = out || "(翻訳できませんでした)";
-    await speakSmart(out || srcText, dstBCP);
+    await speakSmart(out || srcText, dstBCP); // 結果はここで直接読む
   });
 
   templateStart?.addEventListener("click", e=>{ e.preventDefault(); templateStart.style.display="none"; showTemplates("caregiver"); });
   installMessageObserver();
-  console.log("RESCUE4 loaded");
+  console.log("RESCUE5 loaded");
 });
