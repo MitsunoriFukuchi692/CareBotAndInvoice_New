@@ -377,38 +377,76 @@ def explain_term():
 # --------------------------------
 # 翻訳
 # --------------------------------
+# 必要: pip install openai>=1
+
+# ---- 言語ユーティリティ ----
+_LANG_NAME = {
+    "ja": "Japanese", "en": "English", "vi": "Vietnamese",
+    "tl": "Tagalog", "fil": "Tagalog"
+}
+def lang_name(code: str) -> str:
+    return _LANG_NAME.get((code or "en").lower(), code)
+
 import re
+_RE_JA = re.compile(r"[\u3040-\u30FF\u4E00-\u9FFF]")  # ひらカナ漢字
+def looks_japanese(s: str) -> bool:
+    return bool(_RE_JA.search(s or ""))
 
-@app.post("/ja/translate")
-def translate_text():
-    data = request.get_json(force=True) or {}
-    text = (data.get("text") or "").trim() if hasattr(str, "trim") else (data.get("text") or "").strip()
-    direction = (data.get("direction") or "ja-en").lower()
-    if not text:
-        return jsonify({"error":"翻訳するテキストがありません"}), 400
-
-    sys_map = {
-        "ja-en":"あなたは厳密な翻訳エンジンです。出力は翻訳文のみ。日本語→英語に翻訳せよ。",
-        "en-ja":"あなたは厳密な翻訳エンジンです。出力は翻訳文のみ。英語→日本語に翻訳せよ。",
-        "ja-vi":"Bạn là công cụ dịch nghiêm ngặt. Chỉ xuất bản dịch. Dịch Nhật→Việt.",
-        "vi-ja":"Bạn là công cụ dịch nghiêm ngặt. Chỉ xuất bản dịch. Dịch Việt→Nhật.",
-        "ja-tl":"Ikaw ay mahigpit na tagapagsalin. Ibigay lamang ang salin. Isalin Hapon→Tagalog.",
-        "tl-ja":"Ikaw ay mahigpit na tagapagsalin. Ibigay lamang ang salin. Isalin Tagalog→Hapon.",
-    }
-    if direction not in sys_map:
-        return jsonify({"error": f"未対応の翻訳方向: {direction}"}), 400
-
+def _translate_once(text: str, src: str, dst: str) -> str:
+    sys = (
+        f"You are a professional translator. Translate strictly from {lang_name(src)} "
+        f"to {lang_name(dst)}. Output only the {lang_name(dst)} text, no explanations, "
+        f"no quotes, no transliteration."
+    )
+    user = f"Source ({src}): {text}"
     resp = client.chat.completions.create(
         model="gpt-4o-mini",
-        messages=[{"role":"system","content":sys_map[direction]},
-                  {"role":"user","content":text}],
-        temperature=0, max_tokens=256,
+        temperature=0,
+        messages=[{"role":"system","content":sys},
+                  {"role":"user","content":user}]
     )
     out = (resp.choices[0].message.content or "").strip()
-    out = out.strip("`")
-    out = re.sub(r'^(英訳|和訳|訳|translation|output)\s*[:：]\s*','', out, flags=re.I)
-    out = out.splitlines()[0].strip()
-    return jsonify({"translated": out})
+    return out
+
+@app.post("/ja/translate")
+def translate():
+    data = request.get_json(force=True) or {}
+    text = (data.get("text") or "").strip()
+    src  = (data.get("src")  or "ja").lower()
+    dst  = (data.get("dst")  or "en").lower()
+    if not text:
+        return jsonify({"error":"no text"}), 400
+    if src == dst:
+        # 同言語指定は防御的に英→日などへはじく
+        return jsonify({"src":src, "dst":dst, "dst_text": text})
+
+    # 1回目
+    out = _translate_once(text, src, dst)
+
+    # バリデーション：dstが日本語以外なのに日本語っぽい/原文と同一ならリトライ
+    need_retry = False
+    if dst != "ja" and looks_japanese(out):
+        need_retry = True
+    # 余計な失敗（出力が入力と実質同じ）
+    def _norm(s): return re.sub(r"[\s、。,.!?！？]", "", s or "")
+    if _norm(out) == _norm(text):
+        need_retry = True
+
+    if need_retry:
+        sys2 = (
+            f"Return ONLY the {lang_name(dst)} translation. "
+            f"Do NOT include {lang_name(src)} characters or explanations. "
+            f"If the translation equals the source, rewrite naturally in {lang_name(dst)}."
+        )
+        resp2 = client.chat.completions.create(
+            model="gpt-4o-mini",
+            temperature=0,
+            messages=[{"role":"system","content":sys2},
+                      {"role":"user","content":f"Source ({src}): {text}"}]
+        )
+        out = (resp2.choices[0].message.content or "").strip()
+
+    return jsonify({"src": src, "dst": dst, "dst_text": out})
 
 # --- context-based short replies ---
 THANKS_PAT = re.compile(r"(ありがとうございます|感謝|サンキュー|thank(s| you)?)", re.IGNORECASE)
