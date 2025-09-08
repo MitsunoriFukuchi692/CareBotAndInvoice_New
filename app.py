@@ -271,7 +271,7 @@ def _is_allowed_ext(ext):
     return ext.lower() in ALLOWED_VIDEO_EXTS
 
 def _cleanup_old_videos(keep=1):
-    files = sorted((p for p in VIDEO_DIR.iterdir() if p.is_file()),
+    files = sorted((p for p in VIDEO_DIR.iterdir() if p.is_file() ),
                    key=lambda p: p.stat().st_mtime, reverse=True)
     for p in files[keep:]:
         try: p.unlink()
@@ -375,38 +375,70 @@ def explain_term():
         return jsonify({"explanation": msg, "definition": msg}), 200
 
 # --------------------------------
-# 翻訳
+# 翻訳（A→B固定UI向け・厳格判定＋再試行＋Google優先のフォールバック）
 # --------------------------------
-# 必要: pip install openai>=1
+# 使い方:
+#   - フロントは毎回 {text, src, dst} をPOST
+#   - Googleを優先する場合は環境変数 USE_GOOGLE_TRANSLATE=1 を設定（GCP認証が必要）
 
-# ---- 言語ユーティリティ ----
-_LANG_NAME = {
-    "ja": "Japanese", "en": "English", "vi": "Vietnamese",
-    "tl": "Tagalog", "fil": "Tagalog"
-}
+import re, html  # 局所 import
+
+# Google 翻訳（使えなければ自動スキップ）
+try:
+    from google.cloud import translate_v2 as gtranslate
+    _GOK = True
+except Exception:
+    _GOK = False
+
+# ---- 言語名
+_LANG_NAME = {"ja":"Japanese","en":"English","vi":"Vietnamese","tl":"Tagalog","fil":"Tagalog"}
 def lang_name(code: str) -> str:
     return _LANG_NAME.get((code or "en").lower(), code)
 
-import re
-_RE_JA = re.compile(r"[\u3040-\u30FF\u4E00-\u9FFF]")  # ひらカナ漢字
+# ---- 日本語検出・各言語の簡易特性
+_RE_JA = re.compile(r"[\u3040-\u30FF\u4E00-\u9FFF]")
 def looks_japanese(s: str) -> bool:
     return bool(_RE_JA.search(s or ""))
 
-def _translate_once(text: str, src: str, dst: str) -> str:
-    sys = (
-        f"You are a professional translator. Translate strictly from {lang_name(src)} "
-        f"to {lang_name(dst)}. Output only the {lang_name(dst)} text, no explanations, "
-        f"no quotes, no transliteration."
-    )
-    user = f"Source ({src}): {text}"
-    resp = client.chat.completions.create(
-        model="gpt-4o-mini",
-        temperature=0,
-        messages=[{"role":"system","content":sys},
-                  {"role":"user","content":user}]
-    )
-    out = (resp.choices[0].message.content or "").strip()
+_VI_MARKS = set("ăâđêôơưáàạảãắằặẳẵấầậẩẫéèẹẻẽíìịỉĩóòọỏõốồộổỗớờợởỡúùụủũứừựửữýỳỵỷỹ")
+_TAGALOG_HINTS = {"ako","ikaw","siya","tayo","kayo","sila","hindi","oo","mga","ang","ng","sa","dito","dyan","doon","para"}
+
+def is_valid_output(out: str, src_text: str, dst: str) -> bool:
+    if not out: return False
+    # 入力と同一（記号・空白除去）
+    n = lambda s: re.sub(r"[\s、。,.!?！？]", "", s or "")
+    if n(out) == n(src_text): return False
+    # 出力が日本語っぽいなら NG（dst が ja の場合は除く）
+    if dst != "ja" and looks_japanese(out): return False
+    # 各言語の超簡易チェック
+    d = (dst or "").lower()
+    if d == "vi" and not (set(out.lower()) & _VI_MARKS):  # ベトナム語の声調記号
+        return False
+    if d in ("tl","fil"):
+        lo = out.lower()
+        if not any(w in lo for w in _TAGALOG_HINTS):
+            if looks_japanese(out): return False
+    return True
+
+def translate_openai(text: str, src: str, dst: str, retry: int = 2) -> str:
+    sys_msg = (f"You are a precise translator. Translate strictly from {lang_name(src)} to {lang_name(dst)}. "
+               f"Return ONLY the {lang_name(dst)} text, no quotes, no explanations, no transliteration.")
+    msgs = [{"role":"system","content":sys_msg},
+            {"role":"user","content":f"Source ({src}): {text}"}]
+    out = ""
+    for i in range(retry + 1):
+        r = client.chat.completions.create(model="gpt-4o-mini", temperature=0, messages=msgs)
+        out = (r.choices[0].message.content or "").strip()
+        if is_valid_output(out, text, dst): break
+        # 失敗時は制約をさらに強化
+        msgs[0]["content"] = (f"Return ONLY {lang_name(dst)}. Do NOT include any {lang_name(src)} characters. "
+                              f"If the translation equals the source, rewrite naturally in {lang_name(dst)} without explanation.")
     return out
+
+def translate_google(text: str, src: str, dst: str) -> str:
+    cli = gtranslate.Client()  # GOOGLE_APPLICATION_CREDENTIALS で認証
+    res = cli.translate(text, source_language=src, target_language=dst, format_="text")
+    return html.unescape(res["translatedText"]).strip()
 
 @app.post("/ja/translate")
 def translate():
@@ -417,36 +449,26 @@ def translate():
     if not text:
         return jsonify({"error":"no text"}), 400
     if src == dst:
-        # 同言語指定は防御的に英→日などへはじく
         return jsonify({"src":src, "dst":dst, "dst_text": text})
 
-    # 1回目
-    out = _translate_once(text, src, dst)
+    out = ""
+    provider = os.getenv("USE_GOOGLE_TRANSLATE", "0")
 
-    # バリデーション：dstが日本語以外なのに日本語っぽい/原文と同一ならリトライ
-    need_retry = False
-    if dst != "ja" and looks_japanese(out):
-        need_retry = True
-    # 余計な失敗（出力が入力と実質同じ）
-    def _norm(s): return re.sub(r"[\s、。,.!?！？]", "", s or "")
-    if _norm(out) == _norm(text):
-        need_retry = True
+    # 1) Google優先（環境変数=1 かつ ライブラリ使用可能）
+    if provider == "1" and _GOK:
+        try:
+            out = translate_google(text, src, dst)
+            if is_valid_output(out, text, dst):
+                app.logger.info(f"[translate] google ok src={src} dst={dst} out={out[:60]!r}")
+                return jsonify({"src":src, "dst":dst, "dst_text":out, "provider":"google"})
+            out = ""  # 不正なら OpenAI へ
+        except Exception as e:
+            app.logger.warning(f"[translate] google error: {e}")
 
-    if need_retry:
-        sys2 = (
-            f"Return ONLY the {lang_name(dst)} translation. "
-            f"Do NOT include {lang_name(src)} characters or explanations. "
-            f"If the translation equals the source, rewrite naturally in {lang_name(dst)}."
-        )
-        resp2 = client.chat.completions.create(
-            model="gpt-4o-mini",
-            temperature=0,
-            messages=[{"role":"system","content":sys2},
-                      {"role":"user","content":f"Source ({src}): {text}"}]
-        )
-        out = (resp2.choices[0].message.content or "").strip()
-
-    return jsonify({"src": src, "dst": dst, "dst_text": out})
+    # 2) OpenAI（厳格・リトライ付き）
+    out = translate_openai(text, src, dst, retry=2)
+    app.logger.info(f"[translate] openai src={src} dst={dst} valid={is_valid_output(out,text,dst)} out={out[:60]!r}")
+    return jsonify({"src":src, "dst":dst, "dst_text":out, "provider":"openai"})
 
 # --- context-based short replies ---
 THANKS_PAT = re.compile(r"(ありがとうございます|感謝|サンキュー|thank(s| you)?)", re.IGNORECASE)
@@ -493,7 +515,6 @@ def _force_to_lang(text: str, target_lang: str) -> str:
             ],
         )
         out = (r.choices[0].message.content or "").strip()
-        # たまに付く引用符を除去
         if (out.startswith('"') and out.endswith('"')) or (out.startswith('“') and out.endswith('”')):
             out = out[1:-1].strip()
         return out
@@ -502,7 +523,6 @@ def _force_to_lang(text: str, target_lang: str) -> str:
 
 # ===== /ja/suggest（旅行/学習用・ハードBAN付き） =====
 
-# 出力方針（モデル用）
 SYSTEM_SUGGEST = """You are a concise, bilingual travel & translation assistant.
 Task: Based on the recent dialogue and the requested target language, output either:
 - suggestions: 2-5 concise candidate replies the user might tap
@@ -528,8 +548,6 @@ def _fallback_suggestions(tlang: str):
     if tlang in ("tl","fil"):
         return ["Pwede bang dagdagan mo ang detalye?", "Ano ang gusto mo?", "Gusto mo ba ng mga lugar malapit?"]
     return ["もう少し詳しく教えてください。","どんな希望がありますか？","近場のおすすめを出しましょうか？"]
-
-# ハードBAN（方向指示の定型文は物理的に禁止）
 
 BAN_GENERIC = [
   "please go straight.", "go straight.", "please head straight.", "go forward.", "head straight.",
@@ -579,9 +597,8 @@ def ja_suggest():
     if not reply and suggestions:
         reply = suggestions[0]
 
-    # --- 最終フィルタ（ここが“返却直前の1行追加”の場所です） ---
+    # --- 最終フィルタ ---
     if _is_banned_direction(reply):
-        # 文脈ショート応答（thanks/apology/slow）を優先、なければ出発地点の確認に差し替え
         ctx_fix = _context_reply(target_lang, last_text)
         reply = ctx_fix or {
             "en":"Where are you now? (landmark or station name)",
@@ -591,11 +608,10 @@ def ja_suggest():
         }.get(target_lang, "今どこにいますか？")
     suggestions = [s for s in suggestions if not _is_banned_direction(s)] or _fallback_suggestions(target_lang)
 
-# ★ここで言語正規化（ベトナム語固定など）★
+    # 言語正規化（ターゲット言語固定）
     reply = _force_to_lang(reply, target_lang)
     suggestions = [_force_to_lang(s, target_lang) for s in suggestions]
     return jsonify({"suggestions": suggestions[:n], "reply": reply})
-# ===== /ja/suggest ここまで =====
 
 # --------------------------------
 # TTS（Google Text-to-Speech）
