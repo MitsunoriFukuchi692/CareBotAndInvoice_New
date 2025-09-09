@@ -316,7 +316,7 @@ def upload_media():
     if not media_type or not file:
         return jsonify({"error": "media_type or file missing"}), 400
 
-    if media_type == "video":
+    if (media_type == "video"):
         for f in os.listdir(UPLOAD_DIR):
             if f.startswith("video_"):
                 try: (UPLOAD_DIR / f).unlink()
@@ -404,13 +404,11 @@ _VI_MARKS = set("ăâđêôơưáàạảãắằặẳẵấầậẩẫéèẹ
 _TAGALOG_HINTS = {"ako","ikaw","siya","tayo","kayo","sila","hindi","oo","mga","ang","ng","sa","dito","dyan","doon","para"}
 
 def is_valid_output(out: str, src_text: str, dst: str) -> bool:
+  # …（略同）…
     if not out: return False
-    # 入力と同一（記号・空白除去）
     n = lambda s: re.sub(r"[\s、。,.!?！？]", "", s or "")
     if n(out) == n(src_text): return False
-    # 出力が日本語っぽいなら NG（dst が ja の場合は除く）
     if dst != "ja" and looks_japanese(out): return False
-    # 各言語の超簡易チェック
     d = (dst or "").lower()
     if d == "vi" and not (set(out.lower()) & _VI_MARKS):  # ベトナム語の声調記号
         return False
@@ -430,13 +428,12 @@ def translate_openai(text: str, src: str, dst: str, retry: int = 2) -> str:
         r = client.chat.completions.create(model="gpt-4o-mini", temperature=0, messages=msgs)
         out = (r.choices[0].message.content or "").strip()
         if is_valid_output(out, text, dst): break
-        # 失敗時は制約をさらに強化
         msgs[0]["content"] = (f"Return ONLY {lang_name(dst)}. Do NOT include any {lang_name(src)} characters. "
                               f"If the translation equals the source, rewrite naturally in {lang_name(dst)} without explanation.")
     return out
 
 def translate_google(text: str, src: str, dst: str) -> str:
-    cli = gtranslate.Client()  # GOOGLE_APPLICATION_CREDENTIALS で認証
+    cli = gtranslate.Client()
     res = cli.translate(text, source_language=src, target_language=dst, format_="text")
     return html.unescape(res["translatedText"]).strip()
 
@@ -454,18 +451,16 @@ def translate():
     out = ""
     provider = os.getenv("USE_GOOGLE_TRANSLATE", "0")
 
-    # 1) Google優先（環境変数=1 かつ ライブラリ使用可能）
     if provider == "1" and _GOK:
         try:
             out = translate_google(text, src, dst)
             if is_valid_output(out, text, dst):
                 app.logger.info(f"[translate] google ok src={src} dst={dst} out={out[:60]!r}")
                 return jsonify({"src":src, "dst":dst, "dst_text":out, "provider":"google"})
-            out = ""  # 不正なら OpenAI へ
+            out = ""
         except Exception as e:
             app.logger.warning(f"[translate] google error: {e}")
 
-    # 2) OpenAI（厳格・リトライ付き）
     out = translate_openai(text, src, dst, retry=2)
     app.logger.info(f"[translate] openai src={src} dst={dst} valid={is_valid_output(out,text,dst)} out={out[:60]!r}")
     return jsonify({"src":src, "dst":dst, "dst_text":out, "provider":"openai"})
@@ -485,33 +480,19 @@ def _context_reply(target_lang: str, last_text: str):
         return {"en":"Sure, I’ll speak more slowly.","ja":"はい、ゆっくり話しますね。","vi":"Vâng, tôi sẽ nói chậm hơn.","tl":"Sige, magsasalita ako nang dahan-dahan."}.get(target_lang,"はい、ゆっくり話しますね。")
     return None
 
-# 言語コード → 言語名（正規化用）
-LANG_NAME = {
-    "ja": "Japanese",
-    "en": "English",
-    "vi": "Vietnamese",
-    "tl": "Tagalog",
-    "fil": "Tagalog",  # 別名を吸収
-}
+LANG_NAME = {"ja":"Japanese","en":"English","vi":"Vietnamese","tl":"Tagalog","fil":"Tagalog"}
 
-# 返答を必ず target_lang の言語に正規化
 def _force_to_lang(text: str, target_lang: str) -> str:
     if not text or not client:
         return text
     try:
-        lang_name = LANG_NAME.get(target_lang, target_lang)  # vi→Vietnamese, tl/fil→Tagalog
+        lang_name = LANG_NAME.get(target_lang, target_lang)
         r = client.chat.completions.create(
             model="gpt-4o-mini",
             temperature=0.1,
             messages=[
-                {
-                    "role": "system",
-                    "content": f"You output only the normalized {lang_name}. No explanations, no quotes."
-                },
-                {
-                    "role": "user",
-                    "content": f"Normalize the following into {lang_name} ONLY:\n\nTEXT:\n{text}"
-                },
+                {"role": "system","content": f"You output only the normalized {lang_name}. No explanations, no quotes."},
+                {"role": "user","content": f"Normalize the following into {lang_name} ONLY:\n\nTEXT:\n{text}"},
             ],
         )
         out = (r.choices[0].message.content or "").strip()
@@ -520,8 +501,6 @@ def _force_to_lang(text: str, target_lang: str) -> str:
         return out
     except Exception:
         return text
-
-# ===== /ja/suggest（旅行/学習用・ハードBAN付き） =====
 
 SYSTEM_SUGGEST = """You are a concise, bilingual travel & translation assistant.
 Task: Based on the recent dialogue and the requested target language, output either:
@@ -565,9 +544,9 @@ def _is_banned_direction(text: str) -> bool:
 @app.post("/ja/suggest")
 def ja_suggest():
     data = request.get_json(silent=True) or {}
-    dialogue = data.get("dialogue") or []  # [{speaker:'A'|'B', 'text':..., 'lang':'ja-JP'}, ...]
+    dialogue = data.get("dialogue") or []
     target_lang_full = (data.get("target_lang") or "ja-JP")
-    target_lang = target_lang_full.split("-")[0].lower()  # "ja"/"en"/"vi"/"tl"
+    target_lang = target_lang_full.split("-")[0].lower()
     n = max(1, min(int(data.get("n") or 3), 5))
     mode = (data.get("mode") or "suggest").lower()
 
@@ -597,7 +576,6 @@ def ja_suggest():
     if not reply and suggestions:
         reply = suggestions[0]
 
-    # --- 最終フィルタ ---
     if _is_banned_direction(reply):
         ctx_fix = _context_reply(target_lang, last_text)
         reply = ctx_fix or {
@@ -608,7 +586,6 @@ def ja_suggest():
         }.get(target_lang, "今どこにいますか？")
     suggestions = [s for s in suggestions if not _is_banned_direction(s)] or _fallback_suggestions(target_lang)
 
-    # 言語正規化（ターゲット言語固定）
     reply = _force_to_lang(reply, target_lang)
     suggestions = [_force_to_lang(s, target_lang) for s in suggestions]
     return jsonify({"suggestions": suggestions[:n], "reply": reply})
@@ -738,14 +715,12 @@ def stt_transcribe():
         if not f:
             return jsonify({"error": "audioがありません"}), 400
         bio = io.BytesIO(f.read())
-        bio.name = f.filename or "audio.webm"  # SDKが拡張子を使うことがあるため
+        bio.name = f.filename or "audio.webm"
 
-        # OpenAI Whisper で文字起こし
         tr = client.audio.transcriptions.create(
             model="whisper-1",
             file=bio
         )
-        # SDK仕様差異を吸収
         text = getattr(tr, "text", None)
         if text is None and isinstance(tr, dict):
             text = tr.get("text", "")
