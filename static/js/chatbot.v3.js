@@ -1,17 +1,12 @@
 /*
-  chatbot.v3.js — 完全版（2025-09-11）
-  - 介護支援ボット側の挙動に影響を与えない “最小パッチ” 方針
-  - 翻訳学習／観光案内ページの課題を重点修正：
-      1) 翻訳テキストが出ない／遅い → 失敗時もUIに状態を表示
-      2) 音声が出ない／日本語が外国人訛りになる → 言語別の厳密な声選択＆フォールバック
-      3) タガログ語（tl/fil）表記ブレ対策
-  - 既存のUI・テンプレ・マイク処理・イベント監視は触らない設計
-
-  ※ このファイルは単体で読み込み可能なように防御的に実装しています。
-  ※ 既存コードから呼ばれている可能性が高い関数名：
-      - speakSmart(text, langBCP)
-      - translateAndSpeak(text, direction)
-    上記はグローバルに残しつつ、内部の改善ロジックへ委譲します。
+  chatbot.v3.js — 完全版（2025-09-11 修正版）
+  - 介護支援ボットに影響を与えない “最小パッチ”
+  - 改善点：
+      1) 日本語を必ず日本語ボイスで読み上げ（訛り回避）
+      2) /tts 失敗時はブラウザTTSへ確実にフォールバック
+      3) タガログ語 fil/tl の表記ブレ吸収
+      4) 翻訳APIの返却キー差異を広く許容
+      5) 初回再生ブロック対策（クリックでアンロック）
 */
 
 (function(){
@@ -27,23 +22,21 @@
   // 言語コード関連（BCP 47） & 正規化
   //============================================
   const Lang = {
-    // UI/サーバ間のゆるいマッピング（必要最低限）。
-    // 例：{ ja: 'ja-JP', en: 'en-US', vi: 'vi-VN', tl: 'tl-PH' }
+    // 代表的なマップ（必要最低限）
     bcpMap: { ja: 'ja-JP', en: 'en-US', vi: 'vi-VN', tl: 'tl-PH' },
 
-    // タガログ語の fil/tl 揺れを吸収
+    // タガログ語の fil/tl 揺れを吸収して正規化
     normalize(bcp){
       if (!bcp) return 'ja-JP';
       const lc = String(bcp).trim();
       if (lc === 'fil-PH') return 'tl-PH';
-      // 大文字・小文字表記を正規化
       try {
         const [lang, region] = lc.split('-');
         return region ? `${lang.toLowerCase()}-${region.toUpperCase()}` : lang.toLowerCase();
       } catch { return lc; }
     },
 
-    // 翻訳APIの応答から最終的にTTSで使うBCPに落とす
+    // 翻訳方向またはAPI返答から最終BCPを決定
     decideFromDirectionOrResp(direction, resp){
       if (resp && typeof resp.lang === 'string') return Lang.normalize(resp.lang);
       if (resp && typeof resp.targetLang === 'string') return Lang.normalize(resp.targetLang);
@@ -68,7 +61,7 @@
 
     async function loadVoicesOnce(){
       if (voicesLoaded && VOICES.length) return VOICES;
-      // Safari/Chrome で getVoices() が即時0件のことがある → ポーリング
+      // getVoices() が 0 件を返す場合があるためポーリング
       for (let i=0; i<25; i++){
         VOICES = (window.speechSynthesis && window.speechSynthesis.getVoices) ? window.speechSynthesis.getVoices() : [];
         if (VOICES && VOICES.length){ voicesLoaded = true; return VOICES; }
@@ -88,7 +81,7 @@
       const short = lc.split('-')[0];
       v = VOICES.find(v => (v.lang||'').toLowerCase().startsWith(short));
       if (v) return v;
-      // 日本語は “日本/ja-JP” を含む声を優先（環境差吸収）
+      // 日本語は "日本"/ja-JP を含む声を優先（環境差吸収）
       if (short === 'ja'){
         v = VOICES.find(v => /日本|ja-JP/i.test(`${v.name} ${v.lang}`));
         if (v) return v;
@@ -118,11 +111,36 @@
   })();
 
   //============================================
+  // 初回再生ブロック対策（クリック一発でアンロック）
+  //============================================
+  (function setupAudioUnlock(){
+    let unlocked=false;
+    function unlock(){
+      if(unlocked) return;
+      try{
+        if (window.speechSynthesis){
+          const u = new SpeechSynthesisUtterance(' ');
+          u.volume = 0; window.speechSynthesis.speak(u);
+        }
+      }catch{}
+      unlocked=true; window.removeEventListener('click', unlock, true);
+      window.removeEventListener('touchstart', unlock, true);
+    }
+    window.addEventListener('click', unlock, true);
+    window.addEventListener('touchstart', unlock, true);
+  })();
+
+  //============================================
   // サーバTTS → 失敗時ブラウザにフォールバック
   //============================================
   async function speakSmart(text, langBCP){
     if (!text) return;
     langBCP = Lang.normalize(langBCP || 'ja-JP');
+
+    // 日本語は必ずブラウザTTSで読む（訛り回避 & 介護支援ボット安定）
+    if (!langBCP || String(langBCP).toLowerCase().startsWith('ja')){
+      try { await TTS.speakBrowser(text, 'ja-JP'); return; } catch(_){ /* 失敗時は下へ */ }
+    }
 
     try{
       const r = await fetch('/tts',{
@@ -136,16 +154,13 @@
         a.playsInline = true;
         await a.play().catch(()=>{});
         a.onended = () => URL.revokeObjectURL(url);
-        // 念のための自動解放
         setTimeout(()=>URL.revokeObjectURL(url), 15000);
         return;
       }
-    }catch(e){ /* ネットワーク等の失敗は無視してブラウザへ */ }
+    }catch(_){ /* ネットワーク等の失敗は無視して次へ */ }
 
-    // ブラウザの声で読む（日本語はここでもネイティブ声）
-    try{
-      await TTS.speakBrowser(text, langBCP);
-    }catch(e){ /* ここで失敗したら諦める（UI側で表示は行う） */ }
+    // 最後の砦：ブラウザの声で読む
+    try{ await TTS.speakBrowser(text, langBCP); }catch(_){ }
   }
 
   //============================================
@@ -163,12 +178,20 @@
       });
       if (!r.ok) throw new Error('translate '+r.status);
       const j = await r.json();
-      // APIの応答キー差異に広めに対応
-      const translated = j?.text || j?.translated || j?.result || '';
+
+      // 応答JSONから翻訳文字列を幅広く拾う（キー揺れ対策）
+      const translated =
+        j?.text ?? j?.translated ?? j?.result ?? j?.translation
+        ?? j?.data?.translatedText ?? j?.data?.translations?.[0]?.translatedText ?? '';
+
       if (out) out.textContent = translated || '(翻訳なし)';
 
       if (translated){
-        const langBCP = Lang.decideFromDirectionOrResp(direction, j);
+        let langBCP = Lang.decideFromDirectionOrResp(direction, j);
+        // TL/fil 揺れ & vi 安定化
+        if (langBCP && langBCP.toLowerCase() === 'fil-ph') langBCP = 'tl-PH';
+        if (/^vi/i.test(langBCP)) langBCP = 'vi-VN';
+        if (/^tl/i.test(langBCP) || /^fil/i.test(langBCP)) langBCP = 'tl-PH';
         await speakSmart(translated, langBCP);
       }
     }catch(e){
@@ -178,7 +201,7 @@
   }
 
   //============================================
-  // （任意）初期化ヘルパ：ページ読込時に音声リストのウォームアップ
+  // 初期化：ページ読込時にボイス一覧をウォームアップ
   //============================================
   async function warmupVoices(){
     try{ await TTS.loadVoicesOnce(); }catch{}
@@ -192,7 +215,7 @@
   //============================================
   // グローバル公開（既存呼び出し元との互換維持）
   //============================================
-  window.speakSmart = speakSmart;            // 既存互換
-  window.translateAndSpeak = translateAndSpeak; // 既存互換
-  window.__TTS_DEBUG = { TTS, Lang };        // デバッグ用（必要なら）
+  window.speakSmart = speakSmart;                // 既存互換
+  window.translateAndSpeak = translateAndSpeak;  // 既存互換
+  window.__TTS_DEBUG = { TTS, Lang };            // 任意のデバッグ用
 })();
