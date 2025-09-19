@@ -12,72 +12,51 @@ window.addEventListener("touchstart", () => {
 }, { once: true });
 
 // --- サーバーTTS（堅牢版） ---
+// --- サーバーTTS（GET→blob→ObjectURL 専用） ---
 async function speakViaServer(text, langCode){
   if (!text) return;
 
-  async function playFromResponse(res){
-    if (!res.ok) throw new Error("TTS HTTP " + res.status);
-    const ct = res.headers.get("Content-Type") || "";
+  // 端末の無音制限の事前解除（失敗しても続行）
+  try{
+    if (!window.__audioUnlocked){
+      const a = new Audio();
+      a.muted = true;
+      a.playsInline = true;
+      await a.play().catch(()=>{});
+      window.__audioUnlocked = true;
+    }
+  }catch(e){/* ignore */}
+
+  const url = `/tts?text=${encodeURIComponent(text)}&lang=${encodeURIComponent(langCode)}&t=${Date.now()}`;
+  console.log("[TTS][GET→blob] url=", url);
+
+  try{
+    const res = await fetch(url, { method:"GET", cache:"no-store" });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+
+    // audio判定（ヘッダ or blob.type）
+    const ct = (res.headers.get("Content-Type") || "").toLowerCase();
     const blob = await res.blob();
-    if (!ct.startsWith("audio/") && !blob.type.startsWith("audio/")) {
-      let msg = "";
-      try { msg = await (new Response(blob)).text(); } catch(e){}
-      console.warn("[TTS] 非音声レスポンス:", { ct, msg: msg?.slice(0,200) });
-      throw new Error("TTS returned non-audio content");
+
+    if (!(ct.startsWith("audio/") || blob.type.startsWith("audio/"))) {
+      let msg = ""; try{ msg = await (new Response(blob)).text(); }catch(_){}
+      console.error("[TTS] 非音声レスポンス", { ct, msg: msg.slice(0,200) });
+      alert("音声の取得に失敗しました。Network→/tts の Response を確認してください。");
+      return;
     }
-    const url = URL.createObjectURL(blob);
+
+    const objUrl = URL.createObjectURL(blob);
     try{
-      if (typeof window.playTTS === "function"){
-        await window.playTTS(url);
-      } else {
-        const a = new Audio(url);
-        a.playsInline = true;
-        a.muted = false;
-        await a.play();
-      }
+      const audio = new Audio(objUrl);
+      audio.playsInline = true;
+      audio.muted = false;
+      await audio.play();
     } finally {
-      URL.revokeObjectURL(url);
+      URL.revokeObjectURL(objUrl);
     }
-  }
-
-  try{
-    const r1 = await fetch("/tts", {
-      method: "POST",
-      headers: { "Content-Type":"application/json" },
-      body: JSON.stringify({ text, lang: langCode })
-    });
-    await playFromResponse(r1);
-    return;
-  }catch(e1){ console.warn("[TTS] JSON失敗 → urlencoded", e1); }
-
-  try{
-    const r2 = await fetch("/tts", {
-      method: "POST",
-      headers: { "Content-Type":"application/x-www-form-urlencoded;charset=UTF-8" },
-      body: new URLSearchParams({ text, lang: langCode })
-    });
-    await playFromResponse(r2);
-    return;
-  }catch(e2){ console.warn("[TTS] urlencoded失敗 → GET", e2); }
-
-  try{
-    const url = `/tts?text=${encodeURIComponent(text)}&lang=${encodeURIComponent(langCode)}&t=${Date.now()}`;
-    const a = new Audio(url);
-    a.playsInline = true;
-    a.muted = false;
-    await a.play();
-    return;
-  }catch(e3){ console.warn("[TTS] GET失敗 → speechSynthesis", e3); }
-
-  try{
-    const u = new SpeechSynthesisUtterance(text);
-    const ok = ["ja-JP","en-US","vi-VN","fil-PH"];
-    u.lang = ok.includes(langCode) ? langCode : "en-US";
-    u.rate = 1.0; u.volume = 1.0;
-    speechSynthesis.cancel(); speechSynthesis.speak(u);
-  }catch(e4){
-    console.error("[TTS] すべて失敗", e4);
-    alert("音声再生に失敗しました");
+  }catch(e){
+    console.error("[TTS] 再生失敗", e);
+    alert("音声の再生に失敗しました（Console参照）");
   }
 }
 
