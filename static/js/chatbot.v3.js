@@ -227,20 +227,19 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // 翻訳→ネイティブ音声読み上げ
-  translateBtn?.addEventListener("click", async () => {
+  // 翻訳ボタン：翻訳→結果表示→必ずTTS起動
+translateBtn?.addEventListener("click", async () => {
   const src = $("#explanation")?.textContent?.trim();
   if (!src){ alert("先に用語説明を入れてください"); return; }
+
   const direction = $("#translate-direction")?.value || "ja-en";
   try{
     const data = await fetchTranslate(src, direction);
     const translated = data.translated || data.dst_text || pickText(data) || "";
     $("#translation-result").textContent = translated || "(翻訳できませんでした)";
 
-    const speakLangMap = { ja:"ja-JP", en:"en-US", vi:"vi-VN", tl:"fil-PH", fil:"fil-PH" };
-    const targetLang = (direction.split("-")[1] || "en").toLowerCase();
-    const langCode = speakLangMap[targetLang] || "en-US";
-    await speakViaServer(translated, langCode);
+    // ★ data-action に依存せず、翻訳直後に確実にTTSを発火
+    setTimeout(() => { window.onTTS && window.onTTS(); }, 0);
   }catch(err){
     console.error("[translate] error:", err);
     alert("翻訳に失敗しました");
