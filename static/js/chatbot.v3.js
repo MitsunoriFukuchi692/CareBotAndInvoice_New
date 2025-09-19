@@ -250,23 +250,23 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // 翻訳→ネイティブ音声読み上げ
   translateBtn?.addEventListener("click", async () => {
-    const src = $("#explanation")?.textContent?.trim();
-    if (!src){ alert("先に用語説明を入れてください"); return; }
-    const direction = $("#translate-direction")?.value || "ja-en";
-    try{
-      const data = await fetchTranslate(src, direction);
-      const translated = data.translated || pickText(data) || "";
-      $("#translation-result").textContent = translated || "(翻訳できませんでした)";
+  const src = $("#explanation")?.textContent?.trim();
+  if (!src){ alert("先に用語説明を入れてください"); return; }
+  const direction = $("#translate-direction")?.value || "ja-en";
+  try{
+    const data = await fetchTranslate(src, direction);
+    const translated = data.translated || data.dst_text || pickText(data) || "";
+    $("#translation-result").textContent = translated || "(翻訳できませんでした)";
 
-      const speakLangMap = { ja:"ja-JP", en:"en-US", vi:"vi-VN", tl:"fil-PH", fil:"fil-PH" };
-      const targetLang = (direction.split("-")[1] || "en").toLowerCase();
-      const langCode = speakLangMap[targetLang] || "en-US";
-      await speakViaServer(translated, langCode);
-    }catch(err){
-      console.error("[translate] error:", err);
-      alert("翻訳に失敗しました");
-    }
-  });
+    const speakLangMap = { ja:"ja-JP", en:"en-US", vi:"vi-VN", tl:"fil-PH", fil:"fil-PH" };
+    const targetLang = (direction.split("-")[1] || "en").toLowerCase();
+    const langCode = speakLangMap[targetLang] || "en-US";
+    await speakViaServer(translated, langCode);
+  }catch(err){
+    console.error("[translate] error:", err);
+    alert("翻訳に失敗しました");
+  }
+});
 
   saveBtn?.addEventListener("click", () => { /* 未実装 */ });
   templateStartBtn?.addEventListener("click", (e) => {
