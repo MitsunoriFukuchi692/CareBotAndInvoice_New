@@ -1,221 +1,283 @@
-/*
-  chatbot.v3.js — 完全版（2025-09-11 修正版）
-  - 介護支援ボットに影響を与えない “最小パッチ”
-  - 改善点：
-      1) 日本語を必ず日本語ボイスで読み上げ（訛り回避）
-      2) /tts 失敗時はブラウザTTSへ確実にフォールバック
-      3) タガログ語 fil/tl の表記ブレ吸収
-      4) 翻訳APIの返却キー差異を広く許容
-      5) 初回再生ブロック対策（クリックでアンロック）
-*/
+// === chatbot.v3.js (clean 完全版) ===
+console.log("[chatbot.v3.js] cleaned for single TTS flow");
 
-(function(){
-  'use strict';
+// --- iOS/Android 無音対策 ---
+let __audioUnlocked = false;
+window.addEventListener("touchstart", () => {
+  if (__audioUnlocked) return;
+  const a = new Audio();
+  a.muted = true;
+  a.playsInline = true;
+  a.play().catch(() => {}).finally(() => { __audioUnlocked = true; });
+}, { once: true });
 
-  //============================================
-  // 小ユーティリティ
-  //============================================
-  const $ = (sel) => document.getElementById(sel) || document.querySelector(sel);
-  const sleep = (ms) => new Promise(r=>setTimeout(r, ms));
+// --- サーバーTTS（堅牢版） ---
+async function speakViaServer(text, langCode){
+  if (!text) return;
 
-  //============================================
-  // 言語コード関連（BCP 47） & 正規化
-  //============================================
-  const Lang = {
-    // 代表的なマップ（必要最低限）
-    bcpMap: { ja: 'ja-JP', en: 'en-US', vi: 'vi-VN', tl: 'tl-PH' },
-
-    // タガログ語の fil/tl 揺れを吸収して正規化
-    normalize(bcp){
-      if (!bcp) return 'ja-JP';
-      const lc = String(bcp).trim();
-      if (lc === 'fil-PH') return 'tl-PH';
-      try {
-        const [lang, region] = lc.split('-');
-        return region ? `${lang.toLowerCase()}-${region.toUpperCase()}` : lang.toLowerCase();
-      } catch { return lc; }
-    },
-
-    // 翻訳方向またはAPI返答から最終BCPを決定
-    decideFromDirectionOrResp(direction, resp){
-      if (resp && typeof resp.lang === 'string') return Lang.normalize(resp.lang);
-      if (resp && typeof resp.targetLang === 'string') return Lang.normalize(resp.targetLang);
-      switch(direction){
-        case 'JA2EN': return 'en-US';
-        case 'EN2JA': return 'ja-JP';
-        case 'JA2VI': return 'vi-VN';
-        case 'VI2JA': return 'ja-JP';
-        case 'JA2TL': return 'tl-PH';
-        case 'TL2JA': return 'ja-JP';
-        default: return 'ja-JP';
-      }
+  async function playFromResponse(res){
+    if (!res.ok) throw new Error("TTS HTTP " + res.status);
+    const ct = res.headers.get("Content-Type") || "";
+    const blob = await res.blob();
+    if (!ct.startsWith("audio/") && !blob.type.startsWith("audio/")) {
+      let msg = "";
+      try { msg = await (new Response(blob)).text(); } catch(e){}
+      console.warn("[TTS] 非音声レスポンス:", { ct, msg: msg?.slice(0,200) });
+      throw new Error("TTS returned non-audio content");
     }
-  };
-
-  //============================================
-  // ブラウザTTS（SpeechSynthesis）安定化
-  //============================================
-  const TTS = (function(){
-    let VOICES = [];
-    let voicesLoaded = false;
-
-    async function loadVoicesOnce(){
-      if (voicesLoaded && VOICES.length) return VOICES;
-      // getVoices() が 0 件を返す場合があるためポーリング
-      for (let i=0; i<25; i++){
-        VOICES = (window.speechSynthesis && window.speechSynthesis.getVoices) ? window.speechSynthesis.getVoices() : [];
-        if (VOICES && VOICES.length){ voicesLoaded = true; return VOICES; }
-        await sleep(120);
-      }
-      voicesLoaded = true;
-      return VOICES;
-    }
-
-    function pickVoiceByLang(langBCP){
-      if (!VOICES || !VOICES.length) return null;
-      const lc = (langBCP||'').toLowerCase();
-      // 完全一致
-      let v = VOICES.find(v => (v.lang||'').toLowerCase() === lc);
-      if (v) return v;
-      // 言語コード一致（ja, en, vi, tl など）
-      const short = lc.split('-')[0];
-      v = VOICES.find(v => (v.lang||'').toLowerCase().startsWith(short));
-      if (v) return v;
-      // 日本語は "日本"/ja-JP を含む声を優先（環境差吸収）
-      if (short === 'ja'){
-        v = VOICES.find(v => /日本|ja-JP/i.test(`${v.name} ${v.lang}`));
-        if (v) return v;
-      }
-      return VOICES[0] || null;
-    }
-
-    async function speakBrowser(text, langBCP){
-      if (!text) return;
-      await loadVoicesOnce();
-      const v = pickVoiceByLang(langBCP);
-      return new Promise((resolve, reject)=>{
-        try{
-          window.speechSynthesis && window.speechSynthesis.cancel && window.speechSynthesis.cancel();
-          const u = new SpeechSynthesisUtterance(text);
-          if (v) u.voice = v;
-          u.lang = (v && v.lang) ? v.lang : langBCP;
-          u.rate = 1.0; u.pitch = 1.0; u.volume = 1.0;
-          u.onend = resolve;
-          u.onerror = (e)=>reject(e.error||e);
-          window.speechSynthesis.speak(u);
-        }catch(e){ reject(e); }
-      });
-    }
-
-    return { loadVoicesOnce, speakBrowser, pickVoiceByLang };
-  })();
-
-  //============================================
-  // 初回再生ブロック対策（クリック一発でアンロック）
-  //============================================
-  (function setupAudioUnlock(){
-    let unlocked=false;
-    function unlock(){
-      if(unlocked) return;
-      try{
-        if (window.speechSynthesis){
-          const u = new SpeechSynthesisUtterance(' ');
-          u.volume = 0; window.speechSynthesis.speak(u);
-        }
-      }catch{}
-      unlocked=true; window.removeEventListener('click', unlock, true);
-      window.removeEventListener('touchstart', unlock, true);
-    }
-    window.addEventListener('click', unlock, true);
-    window.addEventListener('touchstart', unlock, true);
-  })();
-
-  //============================================
-  // サーバTTS → 失敗時ブラウザにフォールバック
-  //============================================
-  async function speakSmart(text, langBCP){
-    if (!text) return;
-    langBCP = Lang.normalize(langBCP || 'ja-JP');
-
-    // 日本語は必ずブラウザTTSで読む（訛り回避 & 介護支援ボット安定）
-    if (!langBCP || String(langBCP).toLowerCase().startsWith('ja')){
-      try { await TTS.speakBrowser(text, 'ja-JP'); return; } catch(_){ /* 失敗時は下へ */ }
-    }
-
+    const url = URL.createObjectURL(blob);
     try{
-      const r = await fetch('/tts',{
-        method:'POST', headers:{ 'Content-Type':'application/json' },
-        body: JSON.stringify({ text, lang: langBCP })
-      });
-      if (r.ok){
-        const blob = await r.blob();
-        const url = URL.createObjectURL(blob);
+      if (typeof window.playTTS === "function"){
+        await window.playTTS(url);
+      } else {
         const a = new Audio(url);
         a.playsInline = true;
-        await a.play().catch(()=>{});
-        a.onended = () => URL.revokeObjectURL(url);
-        setTimeout(()=>URL.revokeObjectURL(url), 15000);
-        return;
+        a.muted = false;
+        await a.play();
       }
-    }catch(_){ /* ネットワーク等の失敗は無視して次へ */ }
-
-    // 最後の砦：ブラウザの声で読む
-    try{ await TTS.speakBrowser(text, langBCP); }catch(_){ }
-  }
-
-  //============================================
-  // 翻訳 → 表示 → 発声
-  //============================================
-  async function translateAndSpeak(text, direction, opts={}){
-    if (!text) return;
-    const out = opts.outputElId ? $(opts.outputElId) : $(opts.outputSel) || $('#tx-out');
-    if (out) out.textContent = '翻訳中…';
-
-    try{
-      const r = await fetch('/ja/translate',{
-        method:'POST', headers:{ 'Content-Type':'application/json' },
-        body: JSON.stringify({ text, direction })
-      });
-      if (!r.ok) throw new Error('translate '+r.status);
-      const j = await r.json();
-
-      // 応答JSONから翻訳文字列を幅広く拾う（キー揺れ対策）
-      const translated =
-        j?.text ?? j?.translated ?? j?.result ?? j?.translation
-        ?? j?.data?.translatedText ?? j?.data?.translations?.[0]?.translatedText ?? '';
-
-      if (out) out.textContent = translated || '(翻訳なし)';
-
-      if (translated){
-        let langBCP = Lang.decideFromDirectionOrResp(direction, j);
-        // TL/fil 揺れ & vi 安定化
-        if (langBCP && langBCP.toLowerCase() === 'fil-ph') langBCP = 'tl-PH';
-        if (/^vi/i.test(langBCP)) langBCP = 'vi-VN';
-        if (/^tl/i.test(langBCP) || /^fil/i.test(langBCP)) langBCP = 'tl-PH';
-        await speakSmart(translated, langBCP);
-      }
-    }catch(e){
-      console.error(e);
-      if (out) out.textContent = '翻訳に失敗しました';
+    } finally {
+      URL.revokeObjectURL(url);
     }
   }
 
-  //============================================
-  // 初期化：ページ読込時にボイス一覧をウォームアップ
-  //============================================
-  async function warmupVoices(){
-    try{ await TTS.loadVoicesOnce(); }catch{}
-  }
-  if (document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', warmupVoices);
-  } else {
-    warmupVoices();
-  }
+  try{
+    const r1 = await fetch("/tts", {
+      method: "POST",
+      headers: { "Content-Type":"application/json" },
+      body: JSON.stringify({ text, lang: langCode })
+    });
+    await playFromResponse(r1);
+    return;
+  }catch(e1){ console.warn("[TTS] JSON失敗 → urlencoded", e1); }
 
-  //============================================
-  // グローバル公開（既存呼び出し元との互換維持）
-  //============================================
-  window.speakSmart = speakSmart;                // 既存互換
-  window.translateAndSpeak = translateAndSpeak;  // 既存互換
-  window.__TTS_DEBUG = { TTS, Lang };            // 任意のデバッグ用
-})();
+  try{
+    const r2 = await fetch("/tts", {
+      method: "POST",
+      headers: { "Content-Type":"application/x-www-form-urlencoded;charset=UTF-8" },
+      body: new URLSearchParams({ text, lang: langCode })
+    });
+    await playFromResponse(r2);
+    return;
+  }catch(e2){ console.warn("[TTS] urlencoded失敗 → GET", e2); }
+
+  try{
+    const url = `/tts?text=${encodeURIComponent(text)}&lang=${encodeURIComponent(langCode)}&t=${Date.now()}`;
+    const a = new Audio(url);
+    a.playsInline = true;
+    a.muted = false;
+    await a.play();
+    return;
+  }catch(e3){ console.warn("[TTS] GET失敗 → speechSynthesis", e3); }
+
+  try{
+    const u = new SpeechSynthesisUtterance(text);
+    const ok = ["ja-JP","en-US","vi-VN","fil-PH"];
+    u.lang = ok.includes(langCode) ? langCode : "en-US";
+    u.rate = 1.0; u.volume = 1.0;
+    speechSynthesis.cancel(); speechSynthesis.speak(u);
+  }catch(e4){
+    console.error("[TTS] すべて失敗", e4);
+    alert("音声再生に失敗しました");
+  }
+}
+
+// ===== ユーティリティ =====
+const $ = (sel) => document.querySelector(sel);
+function pickText(data){
+  if (!data) return "";
+  if (typeof data === "string") return data;
+  return (
+    data.text || data.explanation || data.definition || data.summary ||
+    data.message || data.result ||
+    (Array.isArray(data.choices) && data.choices[0]?.message?.content) || ""
+  );
+}
+
+// ===== メッセージ表示 =====
+function speak(text, role){
+  if (!text) return;
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  if (isMobile) { speakViaServer(text, "ja-JP"); return; }
+  const u = new SpeechSynthesisUtterance(text);
+  u.volume = 1.0; u.rate = 1.0; u.lang = "ja-JP";
+  window.speechSynthesis.cancel();
+  window.speechSynthesis.speak(u);
+}
+function appendMessage(role, text){
+  const chatWindow = $("#chat-window");
+  const div = document.createElement("div");
+  div.classList.add("message");
+  if (role === "caregiver") div.classList.add("caregiver");
+  if (role === "caree")     div.classList.add("caree");
+  div.textContent = (role === "caregiver" ? "介護士: " : role === "caree" ? "被介護者: " : "") + text;
+  chatWindow.appendChild(div);
+  chatWindow.scrollTop = chatWindow.scrollHeight;
+  speak(text, role);
+}
+
+// ===== テンプレ会話 =====
+const caregiverTemplates = {
+  "体調": ["今日は元気ですか？","どこか痛いところはありますか？","疲れは残っていますか？","最近の体温はどうですか？"],
+  "食事": ["朝ごはんは食べましたか？","食欲はありますか？","最近食べた美味しかったものは？","食事の量は十分でしたか？"],
+  "薬":   ["薬はもう飲みましたか？","飲み忘れはありませんか？","薬を飲んで副作用はありますか？","次の薬の時間は覚えていますか？"],
+  "睡眠": ["昨夜はよく眠れましたか？","途中で目が覚めましたか？","今は眠気がありますか？","夢を見ましたか？"],
+  "排便": ["便通はありましたか？","お腹は痛くないですか？","便の状態は普通でしたか？","最後に排便したのはいつですか？"]
+};
+const careeResponses = {
+  "体調": ["元気です","少し疲れています","腰が痛いです","まあまあです"],
+  "食事": ["はい、食べました","食欲はあります","今日はあまり食べていません","まだ食べていません"],
+  "薬":   ["はい、飲みました","まだ飲んでいません","飲み忘れました","副作用はありません"],
+  "睡眠": ["よく眠れました","途中で目が覚めました","眠気があります","眠れませんでした"],
+  "排便": ["普通でした","少し便秘気味です","下痢でした","昨日ありました"]
+};
+function showTemplates(role, category = null){
+  const templateContainer = $("#template-buttons");
+  templateContainer.innerHTML = "";
+  if (!category){
+    const cats = Object.keys(caregiverTemplates);
+    templateContainer.className = "template-buttons category";
+    cats.forEach(cat => {
+      const b = document.createElement("button");
+      b.textContent = cat;
+      b.addEventListener("click", () => showTemplates("caregiver", cat));
+      templateContainer.appendChild(b);
+    });
+    return;
+  }
+  let templates = [];
+  if (role === "caregiver"){ templates = caregiverTemplates[category]; templateContainer.className = "template-buttons caregiver"; }
+  else { templates = careeResponses[category]; templateContainer.className = "template-buttons caree"; }
+  templates.forEach(t => {
+    const b = document.createElement("button");
+    b.textContent = t;
+    b.addEventListener("click", () => {
+      appendMessage(role, t);
+      if (role === "caregiver") showTemplates("caree", category);
+      else                       showTemplates("caregiver");
+    });
+    templateContainer.appendChild(b);
+  });
+}
+
+// ===== マイク入力 =====
+function setupMic(btn, input){
+  if (!btn || !input) return;
+  btn.addEventListener("click", () => {
+    try{
+      const rec = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+      rec.lang = "ja-JP";
+      rec.onresult = e => input.value = e.results[0][0].transcript;
+      rec.start();
+    }catch(err){
+      console.warn("SpeechRecognition not supported.", err);
+      alert("このブラウザでは音声入力が使えない可能性があります。");
+    }
+  });
+}
+
+// ===== 用語説明 =====
+async function fetchExplain(term){
+  try{
+    const res = await fetch("/ja/explain", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ term, maxLength: 30 })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok){
+      const text = pickText(data);
+      if (text) return text;
+    }
+  }catch(e){}
+  return "";
+}
+
+// ===== 翻訳 =====
+async function fetchTranslate(text, direction){
+  const res = await fetch("/ja/translate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text, direction })
+  });
+  return res.json();
+}
+
+// ===== エントリーポイント =====
+document.addEventListener("DOMContentLoaded", () => {
+  console.log("👉 スクリプト開始");
+
+  const caregiverInput = $("#caregiver-input");
+  const careeInput = $("#caree-input");
+  const caregiverSend = $("#send-caregiver");
+  const careeSend = $("#send-caree");
+  const explainBtn = $("#explain-btn");
+  const translateBtn = $("#translate-btn");
+  const saveBtn = $("#save-log-btn");
+  const templateStartBtn = $("#template-start-btn");
+  const caregiverMic = $("#mic-caregiver");
+  const careeMic = $("#mic-caree");
+
+  caregiverSend?.addEventListener("click", async () => {
+    const v = caregiverInput?.value?.trim();
+    if (!v) return;
+    appendMessage("caregiver", v);
+    caregiverInput.value = "";
+  });
+  careeSend?.addEventListener("click", async () => {
+    const v = careeInput?.value?.trim();
+    if (!v) return;
+    appendMessage("caree", v);
+    careeInput.value = "";
+  });
+
+  setupMic(caregiverMic, caregiverInput);
+  setupMic(careeMic, careeInput);
+
+  explainBtn?.addEventListener("click", async () => {
+    const term = $("#term")?.value?.trim();
+    const out = $("#explanation");
+    if (!term){ alert("用語を入力してください"); return; }
+    explainBtn.disabled = true;
+    out.textContent = "";
+    try{
+      const text = await fetchExplain(term);
+      out.textContent = (text && String(text).trim()) || "(取得できませんでした)";
+      if (text) speak(text, "caregiver");
+    }finally{
+      explainBtn.disabled = false;
+    }
+  });
+
+  // 翻訳→ネイティブ音声読み上げ
+  translateBtn?.addEventListener("click", async () => {
+    const src = $("#explanation")?.textContent?.trim();
+    if (!src){ alert("先に用語説明を入れてください"); return; }
+    const direction = $("#translate-direction")?.value || "ja-en";
+    try{
+      const data = await fetchTranslate(src, direction);
+      const translated = data.translated || pickText(data) || "";
+      $("#translation-result").textContent = translated || "(翻訳できませんでした)";
+
+      const speakLangMap = { ja:"ja-JP", en:"en-US", vi:"vi-VN", tl:"fil-PH", fil:"fil-PH" };
+      const targetLang = (direction.split("-")[1] || "en").toLowerCase();
+      const langCode = speakLangMap[targetLang] || "en-US";
+      await speakViaServer(translated, langCode);
+    }catch(err){
+      console.error("[translate] error:", err);
+      alert("翻訳に失敗しました");
+    }
+  });
+
+  saveBtn?.addEventListener("click", () => { /* 未実装 */ });
+  templateStartBtn?.addEventListener("click", (e) => {
+  e.preventDefault();
+  window.startTemplates();
+});
+});
+
+// ==== パッチから呼び出せる startTemplates 関数 ====
+window.startTemplates = function(){
+  const btn = document.getElementById("template-start-btn");
+  if (btn) btn.style.display = "none";
+  showTemplates("caregiver");
+};
