@@ -260,3 +260,19 @@ window.startTemplates = function(){
   if (btn) btn.style.display = "none";
   showTemplates("caregiver");
 };
+
+// ==== どこからでも呼べる onTTS（クリックパッチ用） ====
+window.onTTS = async function(){
+  // 直近の翻訳結果を取得
+  const text = document.querySelector("#translation-result")?.textContent?.trim();
+  if (!text){ alert("先に翻訳してください"); return; }
+
+  // UIの言語方向から再生言語を決定
+  const dir = document.querySelector("#translate-direction")?.value || "ja-en";
+  const targetLang = (dir.split("-")[1] || "en").toLowerCase();
+  const speakLangMap = { ja:"ja-JP", en:"en-US", vi:"vi-VN", tl:"fil-PH", fil:"fil-PH" };
+  const langCode = speakLangMap[targetLang] || "en-US";
+
+  console.log("[TTS] play:", { text: text.slice(0,60), langCode });
+  await speakViaServer(text, langCode);
+};
