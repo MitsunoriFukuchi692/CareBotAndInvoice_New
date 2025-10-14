@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>自分史ジェネレーター（一般配布版）</title>
+  <title>自分史ジェネレーター（音声入力対応）</title>
   <style>
     :root {
       --bg: #f7f7fb;
@@ -38,9 +38,7 @@
     @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
 
     .sec-title { font-size: 14px; color: var(--muted); margin: 0 0 8px; }
-    textarea, input, button, select {
-      font: inherit;
-    }
+    textarea, input, button, select { font: inherit; }
     textarea {
       width: 100%; min-height: 160px; padding: 12px 12px;
       border: 1px solid var(--border); border-radius: 12px; resize: vertical; background:#fff;
@@ -49,9 +47,7 @@
     .btn {
       cursor: pointer; border: 1px solid var(--border); background: #fff; padding: 8px 12px; border-radius: 10px;
     }
-    .btn.primary {
-      background: var(--accent); color: #fff; border-color: var(--accent);
-    }
+    .btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
     .btn.ghost { background: #fff; }
     .btn:disabled { opacity: .6; cursor: not-allowed; }
     .hint { color: var(--muted); font-size: 12px; }
@@ -60,9 +56,7 @@
       border: 1px dashed var(--border); padding: 6px 10px; border-radius: 999px; cursor: pointer; background:#fff;
     }
     .box { border: 1px solid var(--border); border-radius: 12px; padding: 12px; background: #fff; }
-    .result {
-      min-height: 220px; white-space: pre-wrap; line-height: 1.7;
-    }
+    .result { min-height: 220px; white-space: pre-wrap; line-height: 1.7; }
     .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
     .tab {
       padding: 6px 10px; border-radius: 999px; border:1px solid var(--border); background:#fff; cursor: pointer;
@@ -73,11 +67,12 @@
     code.kbd {
       border:1px solid var(--border); padding: 2px 6px; border-radius:6px; background:#fafafa; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     }
+    #micBtn { background: #f39c12; color: #fff; }
   </style>
 </head>
 <body>
 <header>
-  <h1>自分史ジェネレーター（一般配布版）</h1>
+  <h1>自分史ジェネレーター（一般配布版＋音声入力🎤）</h1>
 </header>
 
 <div class="wrap">
@@ -86,257 +81,55 @@
     <section class="panel">
       <h2 class="sec-title">① 質問を選ぶ or 自由入力</h2>
 
-      <!-- タブ（カテゴリー） -->
-      <div class="tabs" id="presetTabs">
-        <!-- JSで生成 -->
-      </div>
+      <div class="tabs" id="presetTabs"></div>
+      <div id="presetArea" class="chips"></div>
 
-      <!-- プリセット質問 -->
-      <div id="presetArea" class="chips" aria-label="質問プリセット一覧"></div>
-
-      <div style="height:10px"></div>
-      <div class="row">
+      <div class="row" style="margin-top:8px">
         <button id="addSelected" class="btn">選んだ質問を「質問欄」に追加</button>
         <span class="hint">質問をクリックすると選択状態になります（複数可）。</span>
       </div>
 
-      <div style="height:12px"></div>
-      <label class="hint">質問欄（この内容をもとにAIが文章を作成します）</label>
-      <textarea id="userInput" placeholder="例：幼少期の思い出（祖父母との暮らし／好きだった遊び）を書いてください。感情の動きが伝わるように。400〜600字。"></textarea>
+      <label class="hint" style="margin-top:10px;">質問欄</label>
+      <textarea id="userInput" placeholder="ここに音声入力またはキーボード入力してください"></textarea>
 
       <div class="row" style="margin-top:10px">
+        <button id="micBtn" class="btn">🎤 音声入力</button>
         <button id="btnGenerate" class="btn primary">生成する</button>
         <button id="btnClear" class="btn ghost">クリア</button>
         <button id="btnCopyPrompt" class="btn ghost">質問をコピー</button>
-        <span class="hint">ショートカット：<code class="kbd">Ctrl</code> + <code class="kbd">Enter</code></span>
+        <span class="hint">Ctrl + Enter でも生成</span>
       </div>
     </section>
 
     <!-- 右：結果＆保存 -->
     <section class="panel">
       <h2 class="sec-title">② 生成結果</h2>
-      <div id="result" class="box result" aria-live="polite"></div>
+      <div id="result" class="box result"></div>
 
       <div class="row" style="margin-top:10px">
         <button id="btnCopy" class="btn">結果をコピー</button>
-        <button id="btnSave" class="btn">保存（ローカル）</button>
+        <button id="btnSave" class="btn">保存</button>
         <button id="btnLoad" class="btn">読み込み</button>
         <button id="btnDownload" class="btn">.txtでDL</button>
       </div>
 
       <footer>
-        <div>⚠️ ブラウザ保存はこの端末のみに保存されます（<code class="kbd">localStorage</code>）。</div>
-        <div>ミス回避のため、適宜コピーかダウンロードでバックアップしてください。</div>
+        <div>⚠️ 保存はこの端末のみ（localStorage使用）</div>
+        <div>必要に応じてコピーやDLをしてください。</div>
       </footer>
     </section>
   </div>
 
-  <div style="height:14px"></div>
-  <section class="panel">
-    <h2 class="sec-title">使い方（超シンプル）</h2>
+  <section class="panel" style="margin-top:14px">
+    <h2 class="sec-title">使い方</h2>
     <ol style="margin:0; padding-left: 18px;">
-      <li>上のタブからカテゴリーを選ぶ → 気になる質問をクリックで選択 → 「選んだ質問を追加」</li>
-      <li>必要なら自分の言葉も追記 → 「生成する」</li>
-      <li>良ければ「結果をコピー」または「保存/.txtダウンロード」</li>
+      <li>タブから質問を選ぶ or 音声入力</li>
+      <li>「生成する」で文章を作成</li>
+      <li>コピー・保存・DLで活用</li>
     </ol>
-    <div class="hint" style="margin-top:8px">
-      生成APIは <code class="kbd">/generate</code> または <code class="kbd">/api/generate</code> に自動でPOSTします（どちらかが存在すればOK）。
-    </div>
   </section>
-
-  <footer style="text-align:center; margin-top:24px; color:var(--muted); font-size:12px;">
-    © Robo Study Inc. / 利用上の注意：個人情報は入力し過ぎないようにし、公開前に必ずご自身で確認してください。
-  </footer>
 </div>
 
-<script>
-(function(){
-  // ---- プリセット定義 -----------------------------------
-  const PRESETS = {
-    "幼少期": [
-      "幼少期の家庭環境（家族構成／暮らしの雰囲気）を温度感が伝わる描写で。",
-      "いちばん好きだった遊びと、その時の匂い・音・季節感を書いてください。",
-      "祖父母・近所の大人から受けた言葉で、今も残っているものは？"
-    ],
-    "学生時代": [
-      "小中高・大学での部活や打ち込んだこと。挫折と乗り越えを書いてください。",
-      "友人関係や先生との出会いが人生観に与えた影響は？",
-      "受験や引っ越し等の転機で感じた孤独・希望・決意を具体的に。"
-    ],
-    "仕事": [
-      "初めての就職／起業の動機と、その時の不安・覚悟を書いてください。",
-      "仕事で誇れる成果と、その裏にあった工夫・仲間・偶然について。",
-      "失敗から学んだ教訓を、未来の自分への助言として。"
-    ],
-    "家族": [
-      "配偶者・子ども・親とのエピソードで、性格や関係性が伝わる場面を。",
-      "家族行事（旅行・季節の行事）で印象深い一日を情景描写で。",
-      "介護や看取りの経験があれば、当時の心の動きと支えになったもの。"
-    ],
-    "転機": [
-      "人生の分岐点（出会い・病気・転職・移住）での選択と理由を具体的に。",
-      "最大のピンチと、それを救った言葉・人・小さな行動について。",
-      "価値観が変わった瞬間を、前後の対比で描写してください。"
-    ],
-    "これから": [
-      "これから叶えたいこと（家族・仕事・地域）を宣言文として。",
-      "未来の自分へ手紙を書くつもりで、今の想いを素直に。",
-      "若い人へ伝えたい、あなたの『やってよかった3つ』。"
-    ]
-  };
-
-  // ---- 便利関数 -----------------------------------------
-  const $ = (q) => document.querySelector(q);
-  const resultEl = $('#result');
-  const inputEl = $('#userInput');
-
-  const state = {
-    activeTab: Object.keys(PRESETS)[0],
-    selected: new Set(), // 選択中の質問テキスト
-  };
-
-  function flash(el) {
-    el.style.outline = '2px solid #93c5fd';
-    setTimeout(()=> el.style.outline = 'none', 600);
-  }
-
-  // ---- タブ描画 -----------------------------------------
-  function renderTabs() {
-    const tabsWrap = $('#presetTabs');
-    tabsWrap.innerHTML = '';
-    for (const name of Object.keys(PRESETS)) {
-      const b = document.createElement('button');
-      b.className = 'tab' + (name === state.activeTab ? ' active' : '');
-      b.textContent = name;
-      b.onclick = ()=>{ state.activeTab = name; renderPresets(); renderTabs(); };
-      tabsWrap.appendChild(b);
-    }
-  }
-
-  // ---- プリセット描画 -----------------------------------
-  function renderPresets() {
-    const area = $('#presetArea');
-    area.innerHTML = '';
-    const list = PRESETS[state.activeTab] || [];
-    for (const q of list) {
-      const chip = document.createElement('button');
-      chip.type = 'button';
-      chip.className = 'chip';
-      chip.textContent = q;
-      chip.onclick = ()=> {
-        if (state.selected.has(q)) {
-          state.selected.delete(q);
-          chip.style.background = '#fff';
-        } else {
-          state.selected.add(q);
-          chip.style.background = '#eef2ff';
-        }
-      };
-      area.appendChild(chip);
-    }
-  }
-
-  // ---- イベント：質問追加 --------------------------------
-  $('#addSelected').onclick = ()=> {
-    if (state.selected.size === 0) { alert('質問を選んでください。'); return; }
-    const text = Array.from(state.selected).map(s => `・${s}`).join('\n');
-    const cur = inputEl.value.trim();
-    inputEl.value = (cur ? (cur + '\n') : '') + text;
-    state.selected.clear();
-    renderPresets();
-    flash(inputEl);
-  };
-
-  // ---- 生成呼び出し -------------------------------------
-  async function callGenerateAPI(promptText) {
-    // 1st try: /generate, 2nd: /api/generate
-    const endpoints = ['/generate', '/api/generate'];
-    let lastErr = null;
-
-    for (const ep of endpoints) {
-      try {
-        const res = await fetch(ep, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt: promptText })
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        // 期待するキー：text or content
-        const text = data.text || data.content || JSON.stringify(data, null, 2);
-        return text;
-      } catch (e) {
-        lastErr = e;
-      }
-    }
-    throw lastErr || new Error('API呼び出しに失敗しました。');
-  }
-
-  async function onGenerate() {
-    const prompt = inputEl.value.trim();
-    if (!prompt) { alert('質問欄が空です。プリセットを追加するか自由入力してください。'); return; }
-    $('#btnGenerate').disabled = true;
-    resultEl.textContent = '生成中…';
-    try {
-      const out = await callGenerateAPI(prompt);
-      resultEl.textContent = out || '(空の結果)';
-      // 自動保存
-      localStorage.setItem('jibunshi_output', out || '');
-      flash(resultEl);
-    } catch (e) {
-      resultEl.textContent = 'エラー：' + (e?.message || e);
-    } finally {
-      $('#btnGenerate').disabled = false;
-    }
-  }
-
-  // ---- クリップボード -----------------------------------
-  async function copyText(el, label='コピーしました') {
-    const t = (typeof el === 'string') ? el : (el.value ?? el.textContent);
-    await navigator.clipboard.writeText(t || '');
-    flash(typeof el === 'string' ? resultEl : el);
-    alert(label);
-  }
-
-  // ---- 保存/読み込み/ダウンロード -------------------------
-  function saveLocal() {
-    localStorage.setItem('jibunshi_input', inputEl.value || '');
-    localStorage.setItem('jibunshi_output', resultEl.textContent || '');
-    alert('この端末に保存しました。');
-  }
-  function loadLocal() {
-    inputEl.value = localStorage.getItem('jibunshi_input') || '';
-    resultEl.textContent = localStorage.getItem('jibunshi_output') || '';
-    flash(inputEl); flash(resultEl);
-  }
-  function downloadTxt() {
-    const blob = new Blob([resultEl.textContent || ''], { type: 'text/plain;charset=utf-8' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
-    a.download = `jibunshi-${stamp}.txt`;
-    a.click();
-    URL.revokeObjectURL(a.href);
-  }
-
-  // ---- イベント紐付け -----------------------------------
-  $('#btnGenerate').onclick = onGenerate;
-  $('#btnClear').onclick = ()=> { inputEl.value=''; flash(inputEl); };
-  $('#btnCopyPrompt').onclick = ()=> copyText(inputEl, '質問をコピーしました');
-  $('#btnCopy').onclick = ()=> copyText(resultEl, '結果をコピーしました');
-  $('#btnSave').onclick = saveLocal;
-  $('#btnLoad').onclick = loadLocal;
-  $('#btnDownload').onclick = downloadTxt;
-
-  // ショートカット
-  document.addEventListener('keydown', (e)=>{
-    if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); onGenerate(); }
-  });
-
-  // 初期描画＆前回の続き読み込み
-  renderTabs(); renderPresets(); loadLocal();
-})();
-</script>
-
+<script src="{{ url_for('static', filename='js/jibunshi.js') }}"></script>
 </body>
 </html>
