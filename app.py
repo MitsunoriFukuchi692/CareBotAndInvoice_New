@@ -1,6 +1,18 @@
 import os
 from flask import Flask, render_template, request, jsonify
 from openai import OpenAI
+import requests, os
+
+SUPABASE_URL = os.getenv("SUPABASE_URL")          # 例: https://bqrscgzkpeuaakpnmrwv.supabase.co
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")          # anon もしくは publishable
+SUPABASE_TABLE = "histories"
+SUPABASE_REST = f"{SUPABASE_URL}/rest/v1/{SUPABASE_TABLE}"
+SUPABASE_HEADERS = {
+    "apikey": SUPABASE_KEY,
+    "Authorization": f"Bearer {SUPABASE_KEY}",
+    "Content-Type": "application/json",
+    "Prefer": "return=representation"
+}
 
 # --- OpenAIクライアント ---
 client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
@@ -43,6 +55,35 @@ def generate():
     except Exception as e:
         print("Error in /generate:", e)
         return jsonify({"error": str(e)}), 500
+
+# ② ← これを /generate の下あたりに追加
+@app.route("/save", methods=["POST"])
+def save_history():
+    try:
+        data = request.get_json(silent=True) or {}
+        payload = {
+            "user_name": data.get("user_name", "guest"),
+            "prompt": data.get("prompt", ""),
+            "response": data.get("response", "")
+        }
+        r = requests.post(SUPABASE_REST, headers=SUPABASE_HEADERS, json=payload, timeout=10)
+        if r.status_code in (200, 201):
+            return jsonify({"status": "ok", "data": r.json()})
+        return jsonify({"status": "error", "detail": r.text}), r.status_code
+    except Exception as e:
+        return jsonify({"status": "error", "detail": str(e)}), 500
+
+
+@app.route("/get", methods=["GET"])
+def get_histories():
+    try:
+        params = {"select": "*", "order": "created_at.desc", "limit": 20}
+        r = requests.get(SUPABASE_REST, headers=SUPABASE_HEADERS, params=params, timeout=10)
+        if r.ok:
+            return jsonify({"status": "ok", "data": r.json()})
+        return jsonify({"status": "error", "detail": r.text}), r.status_code
+    except Exception as e:
+        return jsonify({"status": "error", "detail": str(e)}), 500
 
 # --- Renderなどで必要 ---
 if __name__ == "__main__":
