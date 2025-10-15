@@ -1,180 +1,162 @@
-(() => {
-  const PRESETS = {
-    "幼少期": [
-      "幼少期の家庭環境（家族構成／暮らしの雰囲気）を温度感が伝わる描写で。",
-      "いちばん好きだった遊びと、その時の匂い・音・季節感を書いてください。",
-      "祖父母・近所の大人から受けた言葉で、今も残っているものは？"
-    ],
-    "学生時代": [
-      "小中高・大学での部活や打ち込んだこと。挫折と乗り越えを書いてください。",
-      "友人関係や先生との出会いが人生観に与えた影響は？",
-      "受験や引っ越し等の転機で感じた孤独・希望・決意を具体的に。"
-    ],
-    "仕事": [
-      "初めての就職／起業の動機と、その時の不安・覚悟を書いてください。",
-      "仕事で誇れる成果と、その裏にあった工夫・仲間・偶然について。",
-      "失敗から学んだ教訓を、未来の自分への助言として。"
-    ],
-    "家族": [
-      "配偶者・子ども・親とのエピソードで、性格や関係性が伝わる場面を。",
-      "家族行事（旅行・季節の行事）で印象深い一日を情景描写で。",
-      "介護や看取りの経験があれば、当時の心の動きと支えになったもの。"
-    ],
-    "転機": [
-      "人生の分岐点（出会い・病気・転職・移住）での選択と理由を具体的に。",
-      "最大のピンチと、それを救った言葉・人・小さな行動について。",
-      "価値観が変わった瞬間を、前後の対比で描写してください。"
-    ],
-    "これから": [
-      "これから叶えたいこと（家族・仕事・地域）を宣言文として。",
-      "未来の自分へ手紙を書くつもりで、今の想いを素直に。",
-      "若い人へ伝えたい、あなたの『やってよかった3つ』。"
-    ]
-  };
+// ==========================
+// 📝 自分史用プリセット（章番号付き）
+// ==========================
+const PRESETS = [
+  {
+    label: "生い立ち",
+    prompt: "私は西暦（　）年（　）月（　）日、（　）県（　）市で生まれました。幼少期の思い出や家族との暮らし、当時の様子を400字で書いてください。"
+  },
+  {
+    label: "学生時代",
+    prompt: "私は（　）学校に通っていた頃、（　）という出来事がありました。そのときの状況や気持ち、学んだことを400字で書いてください。"
+  },
+  {
+    label: "仕事",
+    prompt: "私は（　）年に（　）という仕事を始めました。その仕事を選んだ理由、苦労や転機になった出来事を400字で書いてください。"
+  },
+  {
+    label: "家族",
+    prompt: "私の家族には（　）がいます。印象に残っている家族との思い出や出来事を400字で書いてください。"
+  },
+  {
+    label: "転機",
+    prompt: "私の人生の転機は（　）でした。そのときに起こったこと、考えたこと、そこから得たものを400字で書いてください。"
+  },
+  {
+    label: "これから",
+    prompt: "これまでの経験をふまえて、これからの人生でやってみたいこと、伝えたいことを400字で書いてください。"
+  },
+];
 
-  const $ = (q) => document.querySelector(q);
-  const resultEl = $('#result');
-  const inputEl = $('#userInput');
-  const state = { activeTab: Object.keys(PRESETS)[0], selected: new Set() };
+let chapterCount = 0; // 章番号カウンタ
+let selectedPresets = new Set(); // 選択されたプリセットを記録
 
-  function flash(el) {
-    el.style.outline = '2px solid #93c5fd';
-    setTimeout(()=> el.style.outline = 'none', 600);
-  }
+// ==========================
+// 🟦 タブとプリセットボタン描画
+// ==========================
+function renderPresetUI() {
+  const tabBox = document.getElementById("presetTabs");
+  const chipBox = document.getElementById("presetArea");
+  tabBox.innerHTML = "";
+  chipBox.innerHTML = "";
 
-  // --- タブ ---
-  function renderTabs() {
-    const wrap = $('#presetTabs');
-    wrap.innerHTML = '';
-    for (const name of Object.keys(PRESETS)) {
-      const b = document.createElement('button');
-      b.className = 'tab' + (name === state.activeTab ? ' active' : '');
-      b.textContent = name;
-      b.onclick = ()=>{ state.activeTab = name; renderPresets(); renderTabs(); };
-      wrap.appendChild(b);
-    }
-  }
+  PRESETS.forEach((p, idx) => {
+    // タブボタン
+    const tab = document.createElement("div");
+    tab.className = "tab";
+    tab.textContent = p.label;
+    tab.onclick = () => togglePreset(idx);
+    tabBox.appendChild(tab);
 
-  // --- プリセット ---
-  function renderPresets() {
-    const area = $('#presetArea');
-    area.innerHTML = '';
-    for (const q of PRESETS[state.activeTab] || []) {
-      const chip = document.createElement('button');
-      chip.className = 'chip';
-      chip.textContent = q;
-      chip.onclick = ()=> {
-        if (state.selected.has(q)) {
-          state.selected.delete(q);
-          chip.style.background = '#fff';
-        } else {
-          state.selected.add(q);
-          chip.style.background = '#eef2ff';
-        }
-      };
-      area.appendChild(chip);
-    }
-  }
-
-  $('#addSelected').onclick = ()=> {
-    if (state.selected.size === 0) { alert('質問を選んでください'); return; }
-    const text = Array.from(state.selected).map(s => `・${s}`).join('\n');
-    inputEl.value += (inputEl.value ? '\n' : '') + text;
-    state.selected.clear();
-    renderPresets();
-    flash(inputEl);
-  };
-
-  // --- 音声入力 ---
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (SpeechRecognition) {
-    const recognition = new SpeechRecognition();
-    recognition.lang = 'ja-JP';
-    recognition.continuous = false;
-    recognition.interimResults = false;
-
-    $('#micBtn').addEventListener('click', () => {
-      recognition.start();
-      $('#micBtn').textContent = '🎙聞き取り中...';
-    });
-    recognition.onresult = (e) => {
-      inputEl.value += (inputEl.value ? ' ' : '') + e.results[0][0].transcript;
-      $('#micBtn').textContent = '🎤 音声入力';
-    };
-    recognition.onend = () => $('#micBtn').textContent = '🎤 音声入力';
-    recognition.onerror = () => $('#micBtn').textContent = '🎤 音声入力';
-  } else {
-    $('#micBtn').disabled = true;
-    $('#micBtn').textContent = '非対応';
-  }
-
-  // --- 生成 ---
-  async function callGenerateAPI(promptText) {
-    for (const ep of ['/generate','/api/generate']) {
-      try {
-        const res = await fetch(ep, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt: promptText })
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        return data.text || data.content || '';
-      } catch {}
-    }
-    throw new Error('API呼び出し失敗');
-  }
-
-  async function onGenerate() {
-    const prompt = inputEl.value.trim();
-    if (!prompt) { alert('質問欄が空です'); return; }
-    $('#btnGenerate').disabled = true;
-    resultEl.textContent = '生成中…';
-    try {
-      const out = await callGenerateAPI(prompt);
-      resultEl.textContent = out || '(空の結果)';
-      localStorage.setItem('jibunshi_output', out);
-      flash(resultEl);
-    } catch (e) {
-      resultEl.textContent = 'エラー：' + e.message;
-    } finally {
-      $('#btnGenerate').disabled = false;
-    }
-  }
-
-  $('#btnGenerate').onclick = onGenerate;
-  $('#btnClear').onclick = ()=> { inputEl.value=''; flash(inputEl); };
-
-  // --- コピー・保存 ---
-  async function copyText(el) {
-    const text = (el.value ?? el.textContent) || '';
-    await navigator.clipboard.writeText(text);
-    flash(el);
-  }
-  $('#btnCopyPrompt').onclick = ()=> copyText(inputEl);
-  $('#btnCopy').onclick = ()=> copyText(resultEl);
-  $('#btnSave').onclick = ()=> {
-    localStorage.setItem('jibunshi_input', inputEl.value);
-    localStorage.setItem('jibunshi_output', resultEl.textContent);
-    alert('保存しました');
-  };
-  $('#btnLoad').onclick = ()=> {
-    inputEl.value = localStorage.getItem('jibunshi_input') || '';
-    resultEl.textContent = localStorage.getItem('jibunshi_output') || '';
-  };
-  $('#btnDownload').onclick = ()=> {
-    const blob = new Blob([resultEl.textContent], { type: 'text/plain;charset=utf-8' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
-    a.download = `jibunshi-${stamp}.txt`;
-    a.click();
-    URL.revokeObjectURL(a.href);
-  };
-
-  document.addEventListener('keydown', (e)=>{
-    if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); onGenerate(); }
+    // チップ
+    const chip = document.createElement("div");
+    chip.className = "chip";
+    chip.textContent = p.label;
+    chip.onclick = () => togglePreset(idx);
+    chipBox.appendChild(chip);
   });
+}
 
-  renderTabs(); renderPresets();
-})();
+// ==========================
+// 🟡 プリセット選択トグル
+// ==========================
+function togglePreset(idx) {
+  if (selectedPresets.has(idx)) {
+    selectedPresets.delete(idx);
+  } else {
+    selectedPresets.add(idx);
+  }
+  updatePresetHighlight();
+}
+
+// ==========================
+// 🟠 選択状態の見た目更新
+// ==========================
+function updatePresetHighlight() {
+  const tabs = document.querySelectorAll("#presetTabs .tab");
+  const chips = document.querySelectorAll("#presetArea .chip");
+  tabs.forEach((el, i) => {
+    el.classList.toggle("active", selectedPresets.has(i));
+  });
+  chips.forEach((el, i) => {
+    el.style.background = selectedPresets.has(i) ? "#e0eaff" : "#fff";
+  });
+}
+
+// ==========================
+// 🟩 選択されたプリセットを質問欄に追加
+// ==========================
+function addSelectedPresetsToInput() {
+  const input = document.getElementById("userInput");
+  let baseText = input.value.trim();
+  selectedPresets.forEach((idx) => {
+    chapterCount++;
+    const title = `第${chapterCount}章 ${PRESETS[idx].label}`;
+    const textBlock = `${title}\n${PRESETS[idx].prompt}`;
+    baseText += (baseText ? "\n\n" : "") + textBlock;
+  });
+  input.value = baseText;
+  input.focus();
+
+  if (document.getElementById("autoRun").checked && selectedPresets.size > 0) {
+    generateText();
+  }
+
+  selectedPresets.clear();
+  updatePresetHighlight();
+}
+
+// ==========================
+// 🧠 AI 生成
+// ==========================
+async function generateText() {
+  const userInput = document.getElementById("userInput").value.trim();
+  if (!userInput) return;
+
+  const resultDiv = document.getElementById("result");
+  resultDiv.textContent = "生成中…";
+
+  try {
+    const res = await fetch("/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: userInput }),
+    });
+    const data = await res.json();
+    if (data.text) {
+      resultDiv.textContent = data.text;
+    } else {
+      resultDiv.textContent = "エラー: " + (data.error || "不明なエラー");
+    }
+  } catch (err) {
+    resultDiv.textContent = "通信エラー: " + err;
+  }
+}
+
+// ==========================
+// 🧹 クリア
+// ==========================
+function clearAll() {
+  document.getElementById("userInput").value = "";
+  document.getElementById("result").textContent = "";
+  selectedPresets.clear();
+  updatePresetHighlight();
+}
+
+// ==========================
+// 🧩 イベント登録
+// ==========================
+document.addEventListener("DOMContentLoaded", () => {
+  renderPresetUI();
+
+  document.getElementById("addSelected").addEventListener("click", addSelectedPresetsToInput);
+  document.getElementById("btnGenerate").addEventListener("click", generateText);
+  document.getElementById("btnClear").addEventListener("click", clearAll);
+
+  // Ctrl+Enterで生成
+  document.getElementById("userInput").addEventListener("keydown", (e) => {
+    if (e.ctrlKey && e.key === "Enter") {
+      generateText();
+    }
+  });
+});

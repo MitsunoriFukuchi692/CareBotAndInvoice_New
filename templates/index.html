@@ -81,12 +81,13 @@
     <section class="panel">
       <h2 class="sec-title">① 質問を選ぶ or 自由入力</h2>
 
+      <!-- 🆕 プリセットタブ・チップエリア（章番号付き） -->
       <div class="tabs" id="presetTabs"></div>
       <div id="presetArea" class="chips"></div>
 
       <div class="row" style="margin-top:8px">
         <button id="addSelected" class="btn">選んだ質問を「質問欄」に追加</button>
-        <span class="hint">質問をクリックすると選択状態になります（複数可）。</span>
+        <label class="hint"><input type="checkbox" id="autoRun"> クリックで自動生成</label>
       </div>
 
       <label class="hint" style="margin-top:10px;">質問欄</label>
