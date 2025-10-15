@@ -1,10 +1,19 @@
 import os
+import httpx
+import requests
 from flask import Flask, render_template, request, jsonify
 from openai import OpenAI
-import requests, os
 
-SUPABASE_URL = os.getenv("SUPABASE_URL")          # 例: https://bqrscgzkpeuaakpnmrwv.supabase.co
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")          # anon もしくは publishable
+# --- 環境変数チェック関数 ---
+def require_env(name: str) -> str:
+    v = os.environ.get(name)
+    if not v:
+        raise RuntimeError(f"{name} is not set")
+    return v
+
+# --- Supabase設定 ---
+SUPABASE_URL = require_env("SUPABASE_URL")
+SUPABASE_KEY = require_env("SUPABASE_KEY")
 SUPABASE_TABLE = "histories"
 SUPABASE_REST = f"{SUPABASE_URL}/rest/v1/{SUPABASE_TABLE}"
 SUPABASE_HEADERS = {
@@ -14,8 +23,13 @@ SUPABASE_HEADERS = {
     "Prefer": "return=representation"
 }
 
-# --- OpenAIクライアント ---
-client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+# --- OpenAIクライアント：一度だけ初期化 ---
+OPENAI_API_KEY = require_env("OPENAI_API_KEY")
+client = OpenAI(
+    api_key=OPENAI_API_KEY,
+    http_client=httpx.Client(timeout=30)
+)
+MODEL = "gpt-4o-mini"
 
 app = Flask(__name__)
 
@@ -34,13 +48,11 @@ def generate():
     try:
         data = request.get_json()
         prompt = data.get("prompt", "").strip()
-
         if not prompt:
             return jsonify({"error": "プロンプトが空です"}), 400
 
-        # OpenAI API呼び出し
         response = client.chat.completions.create(
-            model="gpt-4o-mini",   # 軽くて高速
+            model=MODEL,
             messages=[
                 {"role": "system", "content": "あなたは聞き手となって、温かく丁寧な日本語で自分史の文章を整えるAIです。"},
                 {"role": "user", "content": prompt}
@@ -56,7 +68,7 @@ def generate():
         print("Error in /generate:", e)
         return jsonify({"error": str(e)}), 500
 
-# ② ← これを /generate の下あたりに追加
+# --- /save エンドポイント ---
 @app.route("/save", methods=["POST"])
 def save_history():
     try:
@@ -73,7 +85,7 @@ def save_history():
     except Exception as e:
         return jsonify({"status": "error", "detail": str(e)}), 500
 
-
+# --- /get エンドポイント ---
 @app.route("/get", methods=["GET"])
 def get_histories():
     try:
