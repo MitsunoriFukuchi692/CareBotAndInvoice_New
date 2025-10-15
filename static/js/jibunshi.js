@@ -1,6 +1,9 @@
 // ==========================
 // 📝 自分史用プリセット（章番号付き）
 // ==========================
+
+console.log("jibunshi.js v20251015-3 loaded");
+
 const PRESETS = [
   {
     label: "生い立ち",
@@ -160,3 +163,5 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 });
+
+
