@@ -1,139 +1,123 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>自分史ジェネレーター（音声入力対応）</title>
-
-   <style>
-    :root {
-      --bg: #f7f7fb;
-      --panel: #ffffff;
-      --text: #222;
-      --muted: #666;
-      --accent: #2563eb;
-      --border: #e5e7eb;
-      --radius: 14px;
-    }
-    * { box-sizing: border-box; }
+  <meta charset="UTF-8" />
+  <title>自分史ジェネレーター</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  <style>
     body {
-      margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Hiragino Sans", "Noto Sans JP", sans-serif;
-      color: var(--text); background: var(--bg);
+      font-family: "Yu Gothic", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
+      background: #f5f5f5;
+      margin: 0;
+      padding: 0;
     }
-    header {
-      position: sticky; top: 0; z-index: 10;
-      background: linear-gradient(180deg, #fff, #fff0);
-      border-bottom: 1px solid var(--border);
-      padding: 12px 18px;
+    .container {
+      max-width: 900px;
+      margin: auto;
+      padding: 20px;
     }
-    header h1 { margin: 0; font-size: 18px; }
-    .wrap { max-width: 980px; margin: 14px auto 40px; padding: 0 16px; }
-    .panel {
-      background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px;
-      box-shadow: 0 6px 20px rgba(0,0,0,.04);
+    #presetTabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 8px;
     }
-    .grid {
-      display: grid; gap: 16px;
-      grid-template-columns: 1.2fr .8fr;
+    #presetTabs button.active {
+      background-color: #007bff;
+      color: #fff;
     }
-    @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
-
-    .sec-title { font-size: 14px; color: var(--muted); margin: 0 0 8px; }
-    textarea, input, button, select { font: inherit; }
+    #presetArea {
+      display: flex;           /* ← display:none を解除 */
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    #presetArea button {
+      background: #eee;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      padding: 5px 10px;
+      cursor: pointer;
+    }
+    #presetArea button:hover {
+      background: #ddd;
+    }
     textarea {
-      width: 100%; min-height: 160px; padding: 12px 12px;
-      border: 1px solid var(--border); border-radius: 12px; resize: vertical; background:#fff;
+      width: 100%;
+      min-height: 120px;
+      margin-bottom: 10px;
+      padding: 10px;
+      font-size: 16px;
     }
-    .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-    .btn {
-      cursor: pointer; border: 1px solid var(--border); background: #fff; padding: 8px 12px; border-radius: 10px;
+    .button-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 20px;
     }
-    .btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
-    .btn.ghost { background: #fff; }
-    .btn:disabled { opacity: .6; cursor: not-allowed; }
-    .hint { color: var(--muted); font-size: 12px; }
-    .chips { display: flex; gap: 8px; flex-wrap: wrap; }
-    .chip {
-      border: 1px dashed var(--border); padding: 6px 10px; border-radius: 999px; cursor: pointer; background:#fff;
+    .button-row button {
+      padding: 8px 12px;
+      font-size: 15px;
+      cursor: pointer;
     }
-    .box { border: 1px solid var(--border); border-radius: 12px; padding: 12px; background: #fff; }
-    .result { min-height: 220px; white-space: pre-wrap; line-height: 1.7; }
-    .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
-    .tab {
-      padding: 6px 10px; border-radius: 999px; border:1px solid var(--border); background:#fff; cursor: pointer;
-      font-size: 14px;
+    .output-area textarea {
+      min-height: 200px;
     }
-    .tab.active { background: #eff6ff; border-color: #bfdbfe; color: #1d4ed8; }
-    footer { margin: 16px 0 0; font-size: 12px; color: var(--muted); }
-    code.kbd {
-      border:1px solid var(--border); padding: 2px 6px; border-radius:6px; background:#fafafa; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    }
-    #micBtn { background: #f39c12; color: #fff; }
-    #presetArea { display: none; }
   </style>
 </head>
 <body>
-<header>
-  <h1>自分史ジェネレーター（一般配布版＋音声入力🎤）</h1>
-</header>
+  <div class="container">
+    <h2>自分史ジェネレーター</h2>
 
-<div class="wrap">
-  <div class="grid">
-    <!-- 左：入力と操作 -->
-    <section class="panel">
-      <h2 class="sec-title">① 質問を選ぶ or 自由入力</h2>
+    <!-- ✅ プリセットタブ -->
+    <div id="presetTabs"></div>
+    <div id="presetArea"></div>
 
-      <!-- 🆕 プリセットタブ・チップエリア（章番号付き） -->
-      <div class="tabs" id="presetTabs"></div>
-      <div id="presetArea" class="chips"></div>
+    <!-- ✅ 入力欄 -->
+    <textarea id="userInput" placeholder="ここに質問または音声入力を入力してください"></textarea>
 
-      <div class="row" style="margin-top:8px">
-        <button id="addSelected" class="btn">選んだ質問を「質問欄」に追加</button>
-        <label class="hint"><input type="checkbox" id="autoRun"> クリックで自動生成</label>
+    <div class="button-row">
+      <button id="micBtn">🎤 音声入力</button>
+      <button id="generateBtn">生成する</button>
+      <button id="clearBtn">クリア</button>
+      <button id="addQuestionBtn">質問欄に追加</button>
+    </div>
+
+    <!-- ✅ 出力欄 -->
+    <div class="output-area">
+      <textarea id="result" readonly placeholder="ここに生成結果が表示されます"></textarea>
+      <div class="button-row">
+        <button id="copyResultBtn">結果をコピー</button>
+        <button id="saveBtn">保存</button>
+        <button id="loadBtn">読み込み</button>
+        <button id="downloadTxtBtn">.txtでDL</button>
       </div>
-
-      <label class="hint" style="margin-top:10px;">質問欄</label>
-      <textarea id="userInput" placeholder="ここに音声入力またはキーボード入力してください"></textarea>
-
-      <div class="row" style="margin-top:10px">
-        <button id="micBtn" class="btn">🎤 音声入力</button>
-        <button id="btnGenerate" class="btn primary">生成する</button>
-        <button id="btnClear" class="btn ghost">クリア</button>
-        <button id="btnCopyPrompt" class="btn ghost">質問をコピー</button>
-        <span class="hint">Ctrl + Enter でも生成</span>
-      </div>
-    </section>
-
-    <!-- 右：結果＆保存 -->
-    <section class="panel">
-      <h2 class="sec-title">② 生成結果</h2>
-      <div id="result" class="box result"></div>
-
-      <div class="row" style="margin-top:10px">
-        <button id="btnCopy" class="btn">結果をコピー</button>
-        <button id="btnSave" class="btn">保存</button>
-        <button id="btnLoad" class="btn">読み込み</button>
-        <button id="btnDownload" class="btn">.txtでDL</button>
-      </div>
-
-      <footer>
-        <div>⚠️ 保存はこの端末のみ（localStorage使用）</div>
-        <div>必要に応じてコピーやDLをしてください。</div>
-      </footer>
-    </section>
+    </div>
   </div>
 
-  <section class="panel" style="margin-top:14px">
-    <h2 class="sec-title">使い方</h2>
-    <ol style="margin:0; padding-left: 18px;">
-      <li>タブから質問を選ぶ or 音声入力</li>
-      <li>「生成する」で文章を作成</li>
-      <li>コピー・保存・DLで活用</li>
-    </ol>
-  </section>
-</div>
-
-<script src="{{ url_for('static', filename='js/jibunshi.js') }}?v=20251016g"></script>
-
+  <!-- 🎤 音声入力機能とプリセット機能を保持 -->
+  <script src="{{ url_for('static', filename='js/jibunshi.js') }}?v=20251016g"></script>
+  <script>
+    // 🎤 音声入力ボタンのイベント設定
+    document.addEventListener("DOMContentLoaded", () => {
+      const micBtn = document.getElementById("micBtn");
+      if (micBtn) {
+        micBtn.addEventListener("click", () => {
+          if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+            alert("音声認識に対応していないブラウザです。Chromeをおすすめします。");
+            return;
+          }
+          const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+          recognition.lang = 'ja-JP';
+          recognition.onresult = (event) => {
+            const transcript = event.results[0][0].transcript;
+            document.getElementById("userInput").value = transcript;
+          };
+          recognition.start();
+        });
+      }
+    });
+  </script>
 </body>
 </html>
