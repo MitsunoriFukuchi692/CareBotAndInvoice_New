@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <title>自分史ジェネレーター</title>
+  <title>自分史ジェネレーター（安定版）</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
   <style>
@@ -12,65 +12,35 @@
       margin: 0;
       padding: 0;
     }
-    .container {
-      max-width: 900px;
-      margin: auto;
-      padding: 20px;
-    }
-    #presetTabs {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-bottom: 8px;
-    }
-    #presetTabs button.active {
-      background-color: #007bff;
-      color: #fff;
-    }
-    #presetArea {
-      display: flex;           /* ← display:none を解除 */
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-bottom: 10px;
-    }
+    .container { max-width: 900px; margin: auto; padding: 20px; }
+    h2 { margin-bottom: 15px; }
+
+    /* タブ */
+    #presetTabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+    #presetTabs button.active { background-color: #007bff; color: #fff; }
+
+    /* プリセットチップ */
+    #presetArea { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
     #presetArea button {
-      background: #eee;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-      padding: 5px 10px;
-      cursor: pointer;
+      background: #eee; border: 1px solid #ccc; border-radius: 4px;
+      padding: 5px 10px; cursor: pointer;
     }
-    #presetArea button:hover {
-      background: #ddd;
-    }
+    #presetArea button:hover { background: #ddd; }
+
     textarea {
-      width: 100%;
-      min-height: 120px;
-      margin-bottom: 10px;
-      padding: 10px;
-      font-size: 16px;
+      width: 100%; min-height: 120px; margin-bottom: 10px;
+      padding: 10px; font-size: 16px;
     }
-    .button-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      margin-bottom: 20px;
-    }
-    .button-row button {
-      padding: 8px 12px;
-      font-size: 15px;
-      cursor: pointer;
-    }
-    .output-area textarea {
-      min-height: 200px;
-    }
+    .button-row { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
+    .button-row button { padding: 8px 12px; font-size: 15px; cursor: pointer; }
+    .output-area textarea { min-height: 200px; }
   </style>
 </head>
 <body>
   <div class="container">
     <h2>自分史ジェネレーター</h2>
 
-    <!-- ✅ プリセットタブ -->
+    <!-- ✅ プリセット -->
     <div id="presetTabs"></div>
     <div id="presetArea"></div>
 
@@ -96,28 +66,7 @@
     </div>
   </div>
 
-  <!-- 🎤 音声入力機能とプリセット機能を保持 -->
-  <script src="{{ url_for('static', filename='js/jibunshi.js') }}?v=20251016g"></script>
-  <script>
-    // 🎤 音声入力ボタンのイベント設定
-    document.addEventListener("DOMContentLoaded", () => {
-      const micBtn = document.getElementById("micBtn");
-      if (micBtn) {
-        micBtn.addEventListener("click", () => {
-          if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-            alert("音声認識に対応していないブラウザです。Chromeをおすすめします。");
-            return;
-          }
-          const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-          recognition.lang = 'ja-JP';
-          recognition.onresult = (event) => {
-            const transcript = event.results[0][0].transcript;
-            document.getElementById("userInput").value = transcript;
-          };
-          recognition.start();
-        });
-      }
-    });
-  </script>
+  <!-- 🎤 音声入力＋プリセット＋生成スクリプト -->
+  <script src="{{ url_for('static', filename='js/jibunshi.js') }}?v=20251016-stable"></script>
 </body>
 </html>
