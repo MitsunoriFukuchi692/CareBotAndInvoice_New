@@ -2,7 +2,10 @@
 // 📝 自分史用プリセット（章番号付き）
 // ==========================
 
-console.log("jibunshi.js v20251015-3 loaded");
+// ---- build marker ----
+window.__JIBUNSHI_BUILD = '2025-10-16-1';
+console.log('JIBUNSHI BUILD 2025-10-16-1');
+// ----------------------
 
 const PRESETS = [
   {
