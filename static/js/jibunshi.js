@@ -2,7 +2,7 @@
 // 📝 自分史用プリセット（章番号付き）
 // ==========================
 
-// build 2025-10-16-2
+// build 2025-10-16-h
 console.log('JIBUNSHI BUILD 2025-10-16-1');
 // ----------------------
 
@@ -165,3 +165,29 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 });
+
+// ==========================
+// 🎤 音声認識機能（追加）
+// ==========================
+function startRecognition() {
+  if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+    alert("音声認識に対応していないブラウザです。Chromeをおすすめします。");
+    return;
+  }
+
+  const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+  recognition.lang = 'ja-JP';
+  recognition.onresult = (event) => {
+    const transcript = event.results[0][0].transcript;
+    const input = document.getElementById("userInput");
+    input.value = transcript;
+  };
+  recognition.start();
+}
+
+// ==========================
+// 🧩 イベント登録追加（既存DOMLoadedの中）
+// ==========================
+// すでにあるDOMContentLoaded内にこれを追加
+document.getElementById("micBtn").addEventListener("click", startRecognition);
+
