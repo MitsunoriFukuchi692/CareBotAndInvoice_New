@@ -1,6 +1,11 @@
 // ===============================
 // 音声入力（追記仕様）
 // ===============================
+
+const BUILD = "2025-10-17_15:10";        // ←毎回ここだけ更新
+window.JIBUNSHI_BUILD = BUILD;
+console.log("[jibunshi.js] BUILD =", BUILD);
+
 const textarea = document.getElementById("questionInput");
 const resultArea = document.getElementById("resultArea");
 let recognition;
