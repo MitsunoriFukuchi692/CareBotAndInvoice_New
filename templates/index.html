@@ -66,8 +66,12 @@
     </div>
   </div>
 
-  <!-- 🎤 音声入力＋プリセット＋生成スクリプト -->
-  <script src="/static/js/jibunshi_v2.js?v=<?= Date.now() ?>"></script>
+  <!-- JS 読み込み（キャッシュ対策）-->
+<script>
+  const s = document.createElement('script');
+  s.src = '/static/js/jibunshi_v2.js?v=' + Date.now();
+  document.body.appendChild(s);
+</script>
 
 </body>
 </html>
