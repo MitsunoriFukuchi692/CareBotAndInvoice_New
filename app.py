@@ -5,7 +5,20 @@ import requests
 import httpx  # タイムアウト用
 
 # ▼ static フォルダを明示的に指定
-app = Flask(__name__, static_folder="static")
+app = Flask(__name__, static_folder="static", template_folder="templates")
+
+# ▼ 一時デバッグ: static/js の中身一覧
+@app.route("/__debug/static-js")
+def _debug_static_js():
+    root = os.path.join(app.static_folder, "js")
+    exists = os.path.isdir(root)
+    files = sorted(os.listdir(root)) if exists else []
+    return jsonify({
+        "cwd": os.getcwd(),
+        "app.static_folder": app.static_folder,
+        "exists(static/js)": exists,
+        "files(static/js)": files
+    })
 
 # ====== 環境変数チェック ======
 def require_env(name: str) -> str:
