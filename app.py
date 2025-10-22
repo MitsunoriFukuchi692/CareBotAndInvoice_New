@@ -4,6 +4,9 @@ from openai import OpenAI
 import requests
 import httpx  # タイムアウト用
 
+# ▼ static フォルダを明示的に指定
+app = Flask(__name__, static_folder="static")
+
 # ====== 環境変数チェック ======
 def require_env(name: str) -> str:
     v = os.environ.get(name)
