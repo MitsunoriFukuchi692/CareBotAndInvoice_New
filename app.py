@@ -49,13 +49,22 @@ MODEL = "gpt-4o-mini"  # モデルはここで一元管理
 app = Flask(__name__)
 
 # ====== フロントページ ======
+from flask import render_template, make_response
+
 @app.route("/")
 def index():
-    return render_template("index_new.html")
+    return render_template("index.html")   # 既存のままでOK（触らない）
 
 @app.route("/jibunshi")
 def jibunshi():
-    return render_template("index_new.html")
+    return render_template("index.html")   # 既存のままでOK（触らない）
+
+# ★ 新ルート：/new は index_new.html を必ず返す（キャッシュ無効）
+@app.route("/new")
+def index_new():
+    resp = make_response(render_template("index_new.html"))
+    resp.headers["Cache-Control"] = "no-store, max-age=0"
+    return resp
 
 # ====== 文章生成（事実は変えず整えるだけ） ======
 @app.route("/generate", methods=["POST"])
