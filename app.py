@@ -51,11 +51,11 @@ app = Flask(__name__)
 # ====== フロントページ ======
 @app.route("/")
 def index():
-    return render_template("index.html")
+    return render_template("index_new.html")
 
 @app.route("/jibunshi")
 def jibunshi():
-    return render_template("index.html")
+    return render_template("index_new.html")
 
 # ====== 文章生成（事実は変えず整えるだけ） ======
 @app.route("/generate", methods=["POST"])
